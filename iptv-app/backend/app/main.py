@@ -27,9 +27,3 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="IPTV Backend", version="0.1.0", lifespan=lifespan)
 
 app.include_router(channels_router)
-
-# {
-#   "host": "http://link4tv.me",
-#   "username": "KLSBYT7483",
-#   "password": "KLSBYT6592"
-# }
