@@ -152,6 +152,13 @@ def fetch_and_cache_channels(credentials):
         print("Error: Missing credentials (username, password, or hosts)")
         return []
     
+    # Validate API type
+    api_type = api_type.lower()
+    if api_type not in ['m3u', 'xtream']:
+        print(f"Warning: Invalid API type '{api_type}'. Defaulting to 'm3u'.")
+        print("Valid types are: 'm3u' or 'xtream'")
+        api_type = 'm3u'
+    
     all_channels = []
     
     for host in hosts:
@@ -201,6 +208,11 @@ def fetch_and_cache_channels(credentials):
     # Apply filters if specified
     filters = credentials.get('filters', {})
     keywords = filters.get('keywords', [])
+    
+    # Validate keywords is a list
+    if keywords and not isinstance(keywords, list):
+        print(f"Warning: 'keywords' should be a list, got {type(keywords).__name__}. Ignoring filters.")
+        keywords = []
     
     if keywords:
         print(f"\nApplying filters: {keywords}")
