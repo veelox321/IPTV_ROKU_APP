@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 CACHE_PATH = Path(__file__).resolve().parents[2] / "data" / "channels.json"
+LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -23,6 +25,7 @@ def load_cache() -> dict[str, Any] | None:
         with CACHE_PATH.open("r", encoding="utf-8") as handle:
             return json.load(handle)
     except json.JSONDecodeError:
+        LOGGER.warning("Channel cache contains invalid JSON.", exc_info=True)
         return None
 
 
