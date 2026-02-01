@@ -26,10 +26,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # IPTV-like HTTP headers (CRITICAL)
 # --------------------------------------------------
 HEADERS = {
-    "User-Agent": "IPTVSmartersPlayer/1.0",
-    "Accept": "*/*",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
 }
+
 
 
 # --------------------------------------------------
@@ -77,9 +83,9 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
     if not credentials:
         raise RuntimeError("No IPTV credentials provided")
 
-    host = credentials.get("host")
-    username = credentials.get("username")
-    password = credentials.get("password")
+    host = credentials.host
+    username = credentials.username
+    password = credentials.password
 
     if not host or not username or not password:
         raise RuntimeError("Incomplete IPTV credentials")
@@ -89,7 +95,7 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
     params = {
         "username": username,
         "password": password,
-        "action": "get_live_streams",
+        "action": "get_live_categories",
     }
 
     try:
@@ -98,8 +104,10 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
             params=params,
             headers=HEADERS,
             timeout=30,
-            verify=verify_ssl,
+            verify=verify_ssl,   # False
+            allow_redirects=True,
         )
+
 
     except requests.exceptions.SSLError:
         raise RuntimeError("SSL verification failed (self-signed certificate)")
