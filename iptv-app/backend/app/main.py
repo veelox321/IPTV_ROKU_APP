@@ -1,5 +1,7 @@
 """FastAPI application entrypoint."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.config import get_settings
@@ -7,11 +9,8 @@ from app.models import CredentialsIn
 from app.routes.channels import router as channels_router
 from app.services import auth
 
-app = FastAPI(title="IPTV Backend", version="0.1.0")
-
-
-@app.on_event("startup")
-def load_env_credentials() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Load credentials from environment if provided."""
 
     settings = get_settings()
@@ -23,6 +22,14 @@ def load_env_credentials() -> None:
                 password=settings.iptv_password,
             )
         )
+    yield
 
+app = FastAPI(title="IPTV Backend", version="0.1.0", lifespan=lifespan)
 
 app.include_router(channels_router)
+
+# {
+#   "host": "http://link4tv.me",
+#   "username": "KLSBYT7483",
+#   "password": "KLSBYT6592"
+# }
