@@ -31,16 +31,19 @@ def get_channels(search: str | None = Query(default=None, min_length=1)) -> Chan
 
     cached = cache.load_cache()
     if cached and cache.is_cache_valid(cached, credentials.host, settings.cache_ttl_seconds):
-        channels_data = cached.get("channels", [])
-        channels = channels_data
+        channels = []
+        for channel in cached.get("channels", []):
+            if isinstance(channel, dict):
+                stream_url = channel.get("stream_url") or channel.get("url")
+                if stream_url:
+                    channel = {**channel, "stream_url": stream_url}
+            channels.append(channel)
         cached_flag = True
     else:
-        channels = [
-            channel.dict()
-            for channel in iptv.fetch_channels(credentials, settings.verify_ssl)
-        ]
-        cache.save_cache(credentials.host, channels)
-        cached_flag = False
+        raise HTTPException(
+            status_code=404,
+            detail="Channel cache missing or expired. Refresh required.",
+        )
 
     if search:
         search_lower = search.lower()
@@ -65,9 +68,14 @@ def refresh_channels() -> ChannelListResponse:
     if credentials is None:
         raise HTTPException(status_code=400, detail="Credentials not found.")
 
-    channels = [
-        channel.dict()
-        for channel in iptv.fetch_channels(credentials, settings.verify_ssl)
-    ]
-    cache.save_cache(credentials.host, channels)
+    try:
+        channels = iptv.fetch_channels(credentials, settings.verify_ssl)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    try:
+        cache.save_cache(credentials.host, channels)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Failed to save channel cache.") from exc
+
     return ChannelListResponse(channels=channels, cached=False, total=len(channels))

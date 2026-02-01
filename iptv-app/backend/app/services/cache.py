@@ -22,7 +22,7 @@ def load_cache() -> dict[str, Any] | None:
     try:
         with CACHE_PATH.open("r", encoding="utf-8") as handle:
             return json.load(handle)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         return None
 
 

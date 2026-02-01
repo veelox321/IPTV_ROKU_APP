@@ -9,11 +9,13 @@ IPTV service
 - NEVER crash FastAPI (raise controlled errors)
 """
 
-from typing import Dict, List
+from typing import Any, Dict, List
 import requests
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from app.models import CredentialsIn
 
 
 # --------------------------------------------------
@@ -39,8 +41,10 @@ def _build_session() -> requests.Session:
     session = requests.Session()
 
     retries = Retry(
-        total=3,
-        backoff_factor=1.0,
+        total=4,
+        connect=3,
+        read=3,
+        backoff_factor=0.8,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"],
         raise_on_status=False,
@@ -59,7 +63,7 @@ _SESSION = _build_session()
 # --------------------------------------------------
 # Public API
 # --------------------------------------------------
-def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
+def fetch_channels(credentials: CredentialsIn, verify_ssl: bool) -> List[Dict[str, Any]]:
     """
     Fetch live channels from IPTV provider using Xtream Codes API.
 
@@ -77,9 +81,9 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
     if not credentials:
         raise RuntimeError("No IPTV credentials provided")
 
-    host = credentials.get("host")
-    username = credentials.get("username")
-    password = credentials.get("password")
+    host = credentials.host
+    username = credentials.username
+    password = credentials.password
 
     if not host or not username or not password:
         raise RuntimeError("Incomplete IPTV credentials")
@@ -110,13 +114,13 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
     except requests.exceptions.Timeout:
         raise RuntimeError("IPTV request timed out")
 
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"IPTV request failed: {e}")
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"IPTV request failed: {exc}")
 
     if response.status_code != 200:
-        raise RuntimeError(
-            f"IPTV server returned HTTP {response.status_code}"
-        )
+        if response.status_code in {401, 403}:
+            raise RuntimeError("Invalid IPTV credentials")
+        raise RuntimeError(f"IPTV server returned HTTP {response.status_code}")
 
     try:
         raw_channels = response.json()
@@ -129,7 +133,7 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
     # --------------------------------------------------
     # Normalize channels
     # --------------------------------------------------
-    channels: List[Dict] = []
+    channels: List[Dict[str, Any]] = []
 
     for ch in raw_channels:
         try:
@@ -147,10 +151,10 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
 
             channels.append(
                 {
-                    "id": stream_id,
+                    "id": str(stream_id),
                     "name": name,
                     "group": group,
-                    "url": stream_url,
+                    "stream_url": stream_url,
                 }
             )
 
