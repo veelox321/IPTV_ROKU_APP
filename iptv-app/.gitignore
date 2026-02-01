@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# IDEs
+.vscode/
+
+# OS
+.DS_Store
+
+# Cache/data
+backend/app/data/channels.json
