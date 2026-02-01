@@ -70,6 +70,8 @@ copy backend\.env.example backend\.env
 
 ```
 uvicorn app.main:app --reload
+uvicorn app.main:app --reload --log-level debug
+
 ```
 
 ## API endpoints
