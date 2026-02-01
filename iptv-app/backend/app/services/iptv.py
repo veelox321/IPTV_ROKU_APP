@@ -59,7 +59,12 @@ _SESSION = _build_session()
 # --------------------------------------------------
 # Public API
 # --------------------------------------------------
-def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
+def _debug_log(enabled: bool, message: str) -> None:
+    if enabled:
+        print(message)
+
+
+def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = False) -> List[Dict]:
     """
     Fetch live channels from IPTV provider using Xtream Codes API.
 
@@ -93,6 +98,9 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
     }
 
     try:
+        safe_params = {**params, "password": "***"}
+        _debug_log(debug, f"IPTV fetch start: {endpoint}")
+        _debug_log(debug, f"IPTV request params: {safe_params}")
         response = _SESSION.get(
             endpoint,
             params=params,
@@ -100,6 +108,7 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
             timeout=30,
             verify=verify_ssl,
         )
+        _debug_log(debug, f"IPTV response status: {response.status_code}")
 
     except requests.exceptions.SSLError:
         raise RuntimeError("SSL verification failed (self-signed certificate)")
@@ -112,6 +121,8 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
 
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"IPTV request failed: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Unexpected IPTV error: {e}")
 
     if response.status_code != 200:
         raise RuntimeError(
@@ -150,7 +161,7 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool) -> List[Dict]:
                     "id": stream_id,
                     "name": name,
                     "group": group,
-                    "url": stream_url,
+                    "stream_url": stream_url,
                 }
             )
 
