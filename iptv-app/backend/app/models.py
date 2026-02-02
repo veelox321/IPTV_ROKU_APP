@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class CredentialsIn(BaseModel):
     """Incoming IPTV credentials for login."""
 
-    host: str = Field(..., min_length=3, description="Xtream Codes API host URL")
+    host: str = Field(..., min_length=3, description="IPTV host URL or hostname")
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
 
@@ -14,10 +14,8 @@ class CredentialsIn(BaseModel):
 class Channel(BaseModel):
     """Normalized channel data returned to clients."""
 
-    id: str
     name: str
-    group: str
-    stream_url: str
+    url: str
 
 
 class ChannelListResponse(BaseModel):

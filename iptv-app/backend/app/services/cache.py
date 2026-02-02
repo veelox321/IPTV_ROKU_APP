@@ -20,7 +20,7 @@ def load_cache() -> dict[str, Any] | None:
     """Load cached channel data from disk if available."""
 
     if not CACHE_PATH.exists():
-        LOGGER.debug("Channel cache not found.")
+        LOGGER.debug("Channel cache not found at path=%s.", CACHE_PATH)
         return None
     try:
         with CACHE_PATH.open("r", encoding="utf-8") as handle:
@@ -29,6 +29,9 @@ def load_cache() -> dict[str, Any] | None:
             return payload
     except json.JSONDecodeError:
         LOGGER.warning("Channel cache contains invalid JSON.", exc_info=True)
+        return None
+    except Exception:
+        LOGGER.exception("Failed to read channel cache from disk.")
         return None
 
 
@@ -43,7 +46,9 @@ def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CACHE_PATH.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2)
-    LOGGER.debug("Channel cache written to disk for host=%s.", host)
+    LOGGER.debug(
+        "Channel cache written to disk for host=%s count=%s.", host, len(channels)
+    )
 
 
 def is_cache_valid(cache: dict[str, Any], host: str, ttl_seconds: int) -> bool:

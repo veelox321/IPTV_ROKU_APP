@@ -18,10 +18,9 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
     configure_logging(settings.DEBUG)
-    if settings.DEBUG:
-        LOGGER.debug("Application startup.")
-        if auth.load_env_credentials() is not None:
-            LOGGER.debug("Environment credentials detected and available.")
+    LOGGER.debug("Application startup.")
+    if auth.load_env_credentials() is not None:
+        LOGGER.debug("Environment credentials detected and available.")
     yield
 
 app = FastAPI(title="IPTV Backend", version="0.1.0", lifespan=lifespan)

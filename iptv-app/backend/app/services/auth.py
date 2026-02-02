@@ -30,7 +30,7 @@ def set_credentials(credentials: CredentialsIn) -> None:
 
     global _credentials
     _credentials = credentials
-    LOGGER.debug("Credentials updated in memory.")
+    LOGGER.debug("Credentials updated in memory via /login for host=%s.", credentials.host)
 
 
 def get_credentials() -> Optional[CredentialsIn]:
@@ -43,7 +43,7 @@ def get_credentials() -> Optional[CredentialsIn]:
     env_credentials = load_env_credentials()
     if env_credentials is not None:
         _credentials = env_credentials
-        LOGGER.debug("Loaded credentials from environment fallback.")
+        LOGGER.debug("Loaded credentials from environment fallback for host=%s.", env_credentials.host)
     return _credentials
 
 

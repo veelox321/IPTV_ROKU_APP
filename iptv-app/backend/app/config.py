@@ -30,8 +30,7 @@ def get_settings() -> Settings:
 def configure_logging(debug: bool) -> None:
     """Configure application logging."""
 
-    level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
-        level=level,
+        level=logging.DEBUG,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
