@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.models import Channel, ChannelListResponse, CredentialsIn
+from app.models import CredentialsIn
 from app.services import auth, cache, iptv
 
 router = APIRouter()
@@ -39,28 +39,28 @@ def login(credentials: CredentialsIn) -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/channels", response_model=ChannelListResponse)
-def get_channels(
-    search: str | None = Query(default=None, min_length=1),
-) -> ChannelListResponse | Response:
-    """Return channels from cache only."""
+@router.get("/channels")
+def get_channels(search: str | None = Query(default=None, min_length=1)) -> dict:
+    """Return channels, using cached data when valid."""
 
     if not auth.has_credentials():
-        raise HTTPException(status_code=400, detail="Login required before fetching channels.")
+        raise HTTPException(
+            status_code=400,
+            detail="Credentials required. Provide via /login or env settings.",
+        )
 
     credentials = auth.get_credentials()
     if credentials is None:
         raise HTTPException(status_code=400, detail="Credentials not found.")
 
     cached = cache.load_cache()
-    channels = []
-    cached_flag = False
-    if cached and cached.get("host") == credentials.host:
-        channels = cached.get("channels", [])
-        cached_flag = True
+    if not cached or not cache.is_cache_valid(cached, credentials.host, settings.cache_ttl_seconds):
+        return {
+            "status": "partial",
+            "detail": "No cached channels available. Run /refresh to fetch fresh data.",
+        }
 
-    if not channels:
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    channels = cached.get("channels", [])
 
     if search:
         search_lower = search.lower()
@@ -70,74 +70,31 @@ def get_channels(
             if search_lower in channel.get("name", "").lower()
         ]
 
-    return ChannelListResponse(channels=channels, cached=cached_flag, total=len(channels))
+    return {"status": "ok", "channels": channels, "cached": True, "total": len(channels)}
 
 
-@router.post("/refresh", response_model=RefreshResponse)
-def refresh_channels() -> RefreshResponse:
+@router.post("/refresh")
+def refresh_channels() -> dict[str, str]:
     """Force refresh the channel cache."""
 
     if not auth.has_credentials():
-        raise HTTPException(status_code=400, detail="Login required before refreshing channels.")
+        raise HTTPException(
+            status_code=400,
+            detail="Credentials required. Provide via /login or env settings.",
+        )
 
     credentials = auth.get_credentials()
     if credentials is None:
         raise HTTPException(status_code=400, detail="Credentials not found.")
 
-    settings = get_settings()
     try:
-        channels = [
-            channel.dict()
-            for channel in iptv.fetch_channels(credentials, settings.verify_ssl)
-        ]
-    except Exception as exc:  # noqa: BLE001 - ensure resilience with upstream failures.
-        cached = cache.load_cache()
-        cached_channels = 0
-        cache_available = False
-        if cached and cached.get("host") == credentials.host:
-            cached_channels = len(cached.get("channels", []))
-            cache_available = cached_channels > 0
-        if cache_available:
-            return RefreshResponse(
-                status="partial",
-                detail="IPTV provider unavailable, using cached channels",
-                cached_channels=cached_channels,
-            )
-        raise HTTPException(
-            status_code=502,
-            detail=f"IPTV provider unavailable: {exc}",
-        ) from exc
+        channels = iptv.fetch_channels(
+            {"host": credentials.host, "username": credentials.username, "password": credentials.password},
+            settings.verify_ssl,
+            debug=settings.DEBUG,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
     cache.save_cache(credentials.host, channels)
-    return RefreshResponse(
-        status="ok",
-        detail="Channels refreshed successfully.",
-        channels=channels,
-        total=len(channels),
-    )
-
-
-@router.get("/status", response_model=StatusResponse)
-def get_status() -> StatusResponse:
-    """Return backend status information."""
-
-    credentials = auth.get_credentials()
-    cached = cache.load_cache()
-    cache_available = False
-    last_refresh = None
-    channel_count = 0
-    if cached:
-        cache_available = True
-        last_refresh = cached.get("timestamp")
-        channel_count = len(cached.get("channels", []))
-        if credentials and cached.get("host") != credentials.host:
-            cache_available = False
-            channel_count = 0
-            last_refresh = None
-
-    return StatusResponse(
-        logged_in=auth.has_credentials(),
-        cache_available=cache_available,
-        last_refresh=last_refresh,
-        channel_count=channel_count,
-    )
+    return {"status": "ok"}
