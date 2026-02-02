@@ -1,34 +1,12 @@
 """API routes for channel operations."""
 
-from typing import Literal
-
-from fastapi import APIRouter, HTTPException, Query, Response, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Query
 
 from app.config import get_settings
 from app.models import CredentialsIn
 from app.services import auth, cache, iptv
 
 router = APIRouter()
-
-
-class RefreshResponse(BaseModel):
-    """Response for refresh attempts."""
-
-    status: Literal["ok", "partial", "error"]
-    detail: str = Field(..., min_length=1)
-    cached_channels: int | None = None
-    channels: list[Channel] | None = None
-    total: int | None = None
-
-
-class StatusResponse(BaseModel):
-    """Status summary for the IPTV backend."""
-
-    logged_in: bool
-    cache_available: bool
-    last_refresh: str | None
-    channel_count: int
 
 
 @router.post("/login")
@@ -49,6 +27,7 @@ def get_channels(search: str | None = Query(default=None, min_length=1)) -> dict
             detail="Credentials required. Provide via /login or env settings.",
         )
 
+    settings = get_settings()
     credentials = auth.get_credentials()
     if credentials is None:
         raise HTTPException(status_code=400, detail="Credentials not found.")
@@ -83,6 +62,7 @@ def refresh_channels() -> dict[str, str]:
             detail="Credentials required. Provide via /login or env settings.",
         )
 
+    settings = get_settings()
     credentials = auth.get_credentials()
     if credentials is None:
         raise HTTPException(status_code=400, detail="Credentials not found.")
