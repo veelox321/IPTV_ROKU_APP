@@ -1,10 +1,12 @@
 """In-memory credential storage service."""
 
 from typing import Optional
+import logging
 
 from app.config import get_settings
 from app.models import CredentialsIn
 
+LOGGER = logging.getLogger(__name__)
 
 _credentials: Optional[CredentialsIn] = None
 
@@ -13,13 +15,13 @@ def load_env_credentials() -> Optional[CredentialsIn]:
     """Load credentials from environment if fully configured."""
 
     settings = get_settings()
-    if not settings.IPTV_HOST or not settings.IPTV_USERNAME or not settings.IPTV_PASSWORD:
+    if not settings.iptv_host or not settings.iptv_username or not settings.iptv_password:
         return None
 
     return CredentialsIn(
-        host=settings.IPTV_HOST,
-        username=settings.IPTV_USERNAME,
-        password=settings.IPTV_PASSWORD,
+        host=settings.iptv_host,
+        username=settings.iptv_username,
+        password=settings.iptv_password,
     )
 
 
@@ -28,6 +30,7 @@ def set_credentials(credentials: CredentialsIn) -> None:
 
     global _credentials
     _credentials = credentials
+    LOGGER.debug("Credentials updated in memory.")
 
 
 def get_credentials() -> Optional[CredentialsIn]:
@@ -40,6 +43,7 @@ def get_credentials() -> Optional[CredentialsIn]:
     env_credentials = load_env_credentials()
     if env_credentials is not None:
         _credentials = env_credentials
+        LOGGER.debug("Loaded credentials from environment fallback.")
     return _credentials
 
 
