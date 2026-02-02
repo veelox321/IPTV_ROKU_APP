@@ -9,12 +9,14 @@ IPTV service
 - NEVER crash FastAPI (raise controlled errors)
 """
 
-from typing import Dict, List
+from typing import Any
+import logging
 import requests
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from app.models import CredentialsIn
 
 # --------------------------------------------------
 # Disable SSL warnings (required for IPTV providers)
@@ -62,20 +64,14 @@ def _build_session() -> requests.Session:
 _SESSION = _build_session()
 
 
-# --------------------------------------------------
-# Public API
-# --------------------------------------------------
-def _debug_log(enabled: bool, message: str) -> None:
-    if enabled:
-        print(message)
+LOGGER = logging.getLogger(__name__)
 
-
-def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = False) -> List[Dict]:
+def fetch_channels(credentials: CredentialsIn, verify_ssl: bool) -> list[dict[str, Any]]:
     """
     Fetch live channels from IPTV provider using Xtream Codes API.
 
     Args:
-        credentials: dict with keys {host, username, password}
+        credentials: IPTV credential model
         verify_ssl: bool (False for most IPTV providers)
 
     Returns:
@@ -84,9 +80,6 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = 
     Raises:
         RuntimeError: controlled error for FastAPI layer
     """
-
-    if not credentials:
-        raise RuntimeError("No IPTV credentials provided")
 
     host = credentials.host
     username = credentials.username
@@ -97,16 +90,15 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = 
 
     endpoint = f"{host.rstrip('/')}/player_api.php"
 
+    action = "get_live_categories"
     params = {
         "username": username,
         "password": password,
-        "action": "get_live_categories",
+        "action": action,
     }
 
     try:
-        safe_params = {**params, "password": "***"}
-        _debug_log(debug, f"IPTV fetch start: {endpoint}")
-        _debug_log(debug, f"IPTV request params: {safe_params}")
+        LOGGER.debug("IPTV fetch start: endpoint=%s action=%s", endpoint, action)
         response = _SESSION.get(
             endpoint,
             params=params,
@@ -115,7 +107,7 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = 
             verify=verify_ssl,   # False
             allow_redirects=True,
         )
-        _debug_log(debug, f"IPTV response status: {response.status_code}")
+        LOGGER.debug("IPTV response status: %s", response.status_code)
 
 
     except requests.exceptions.SSLError:
@@ -148,7 +140,7 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = 
     # --------------------------------------------------
     # Normalize channels
     # --------------------------------------------------
-    channels: List[Dict] = []
+    channels: list[dict[str, Any]] = []
 
     for ch in raw_channels:
         try:
@@ -180,4 +172,5 @@ def fetch_channels(credentials: Dict[str, str], verify_ssl: bool, debug: bool = 
     if not channels:
         raise RuntimeError("No channels returned by IPTV provider")
 
+    LOGGER.debug("IPTV channels parsed: count=%s", len(channels))
     return channels
