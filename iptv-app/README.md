@@ -66,12 +66,18 @@ pip install -r backend/requirements.txt
 copy backend\.env.example backend\.env
 ```
 
-4. Run the backend locally:
+4. Run the backend locally (from the repo root):
 
 ```
-uvicorn app.main:app --reload
-uvicorn app.main:app --reload --log-level debug
+uvicorn backend.app.main:app --reload
+uvicorn backend.app.main:app --reload --log-level debug
 
+```
+
+5. (Optional) Run the Streamlit UI (from the repo root):
+
+```
+streamlit run backend/streamlit_app.py
 ```
 
 ## API endpoints

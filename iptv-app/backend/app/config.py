@@ -2,6 +2,8 @@
 
 from functools import lru_cache
 import logging
+from pathlib import Path
+
 from pydantic import BaseSettings, Field
 
 
@@ -16,7 +18,7 @@ class Settings(BaseSettings):
     verify_ssl: bool = Field(default=True, env="VERIFY_SSL")
 
     class Config:
-        env_file = ".env"
+        env_file = str(Path(__file__).resolve().parents[1] / ".env")
         case_sensitive = False
 
 
