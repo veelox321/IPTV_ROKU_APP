@@ -27,6 +27,8 @@ HEADERS = {
 DEFAULT_FILTER_KEYWORDS = ["ufc", "paramount"]
 ATTR_RE = re.compile(r'([A-Za-z0-9_-]+)="([^"]*)"')
 
+ALLOWED_CATEGORIES = {"tv", "movies", "series", "other"}
+
 CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     (
         "movies",
@@ -168,6 +170,15 @@ def normalize_category(group: str) -> str:
         if any(keyword in normalized for keyword in keywords):
             return category
     return "other"
+
+
+def coerce_category(category: str | None, group: str | None = None) -> str:
+    """Ensure a category matches allowed values, falling back to group parsing."""
+
+    normalized = (category or "").strip().lower()
+    if normalized in ALLOWED_CATEGORIES:
+        return normalized
+    return normalize_category(group or normalized)
 
 
 
