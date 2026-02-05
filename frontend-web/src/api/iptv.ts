@@ -64,12 +64,20 @@ async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
     }
 
     return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      console.debug("IPTV API request aborted (timeout)", { path });
+      throw new Error("Request timed out while contacting the backend.");
+    }
+    console.debug("IPTV API request failed", { path, error });
+    throw error;
   } finally {
     window.clearTimeout(timeoutId);
   }
 }
 
 export async function login(credentials: Credentials): Promise<{ status: string }> {
+  console.debug("IPTV login request", { host: credentials.host, username: credentials.username });
   return requestJson<{ status: string }>("/login", {
     method: "POST",
     body: JSON.stringify(credentials),
