@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any, Iterable
 import logging
 import re
+import time
 from urllib.parse import urlparse
 
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
 
 from backend.app.config import get_settings
 from backend.app.models import CredentialsIn
@@ -65,6 +67,13 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ),
 ]
 
+class IPTVFetchError(RuntimeError):
+    """Raised when IPTV playlist fetch fails after retries."""
+
+
+class _FetchFailure(RuntimeError):
+    """Internal helper for fetch failures."""
+
 
 
 def _normalize_host(host: str) -> str:
@@ -91,40 +100,128 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
 
     settings = get_settings()
     url = build_m3u_url(credentials)
-    LOGGER.debug("M3U download start: url=%s", url)
+    LOGGER.info("[REFRESH] M3U download start: url=%s", url)
+
+    session = requests.Session()
+    adapter = HTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    attempts = 3
+    last_exc: Exception | None = None
+    last_reason: str | None = None
+
     try:
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            timeout=20,
-            verify=settings.verify_ssl,
-            allow_redirects=True,
-        )
-    except requests.exceptions.SSLError as exc:
-        LOGGER.exception("SSL error during M3U download.")
-        raise RuntimeError("SSL verification failed (self-signed certificate)") from exc
-    except requests.exceptions.ConnectionError as exc:
-        LOGGER.exception("Connection error during M3U download.")
-        raise RuntimeError("IPTV server closed the connection") from exc
-    except requests.exceptions.Timeout as exc:
-        LOGGER.exception("Timeout during M3U download.")
-        raise RuntimeError("IPTV request timed out") from exc
-    except requests.exceptions.RequestException as exc:
-        LOGGER.exception("Request error during M3U download.")
-        raise RuntimeError(f"IPTV request failed: {exc}") from exc
-    except Exception as exc:
-        LOGGER.exception("Unexpected IPTV error during M3U download.")
-        raise RuntimeError(f"Unexpected IPTV error: {exc}") from exc
+        for attempt in range(1, attempts + 1):
+            start = time.monotonic()
+            try:
+                response = session.get(
+                    url,
+                    headers=HEADERS,
+                    timeout=(10, 90),
+                    verify=settings.verify_ssl,
+                    allow_redirects=True,
+                )
+                elapsed = time.monotonic() - start
+                LOGGER.info(
+                    "[REFRESH] attempt %s/%s response status=%s elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    response.status_code,
+                    elapsed,
+                )
+                if response.status_code != 200:
+                    raise _FetchFailure(f"HTTP {response.status_code}")
 
-    LOGGER.debug("M3U response status: %s", response.status_code)
-    if response.status_code != 200:
-        raise RuntimeError(f"IPTV server returned HTTP {response.status_code}")
+                playlist_text = response.text or ""
+                LOGGER.info(
+                    "[REFRESH] M3U download complete: bytes=%s elapsed=%.2fs",
+                    len(playlist_text.encode("utf-8")),
+                    elapsed,
+                )
+                if not playlist_text.strip():
+                    raise _FetchFailure("empty playlist")
+                return playlist_text
+            except requests.exceptions.SSLError as exc:
+                elapsed = time.monotonic() - start
+                last_exc = exc
+                last_reason = "ssl_error"
+                LOGGER.warning(
+                    "[REFRESH] attempt %s/%s failed: ssl_error elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    elapsed,
+                )
+            except requests.exceptions.Timeout as exc:
+                elapsed = time.monotonic() - start
+                last_exc = exc
+                last_reason = "timeout"
+                LOGGER.warning(
+                    "[REFRESH] attempt %s/%s failed: timeout elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    elapsed,
+                )
+            except requests.exceptions.ConnectionError as exc:
+                elapsed = time.monotonic() - start
+                last_exc = exc
+                last_reason = "connection_error"
+                LOGGER.warning(
+                    "[REFRESH] attempt %s/%s failed: connection_error elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    elapsed,
+                )
+            except _FetchFailure as exc:
+                elapsed = time.monotonic() - start
+                last_exc = exc
+                last_reason = str(exc)
+                LOGGER.warning(
+                    "[REFRESH] attempt %s/%s failed: %s elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    exc,
+                    elapsed,
+                )
+            except requests.exceptions.RequestException as exc:
+                elapsed = time.monotonic() - start
+                last_exc = exc
+                last_reason = "request_error"
+                LOGGER.warning(
+                    "[REFRESH] attempt %s/%s failed: request_error elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    elapsed,
+                )
+            except Exception as exc:
+                elapsed = time.monotonic() - start
+                last_exc = exc
+                last_reason = "unexpected_error"
+                LOGGER.warning(
+                    "[REFRESH] attempt %s/%s failed: unexpected_error elapsed=%.2fs",
+                    attempt,
+                    attempts,
+                    elapsed,
+                )
 
-    playlist_text = response.text or ""
-    LOGGER.debug("M3U download complete: bytes=%s", len(playlist_text.encode("utf-8")))
-    if not playlist_text.strip():
-        raise RuntimeError("Empty M3U playlist received from IPTV provider")
-    return playlist_text
+            if attempt < attempts:
+                backoff = 2 ** (attempt - 1)
+                time.sleep(backoff)
+    finally:
+        session.close()
+
+    if last_reason == "ssl_error":
+        message = "SSL verification failed (self-signed certificate)"
+    elif last_reason == "timeout":
+        message = "IPTV request timed out"
+    elif last_reason == "connection_error":
+        message = "IPTV server closed the connection"
+    elif last_reason:
+        message = f"IPTV request failed: {last_reason}"
+    else:
+        message = "Failed to fetch IPTV playlist after retries"
+
+    raise IPTVFetchError(message) from last_exc
 
 
 

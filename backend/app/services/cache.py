@@ -29,6 +29,10 @@ LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
 _REFRESH_LOCK = threading.Lock()
 _REFRESHING = False
+_REFRESH_METADATA_LOCK = threading.Lock()
+_LAST_REFRESH_STATUS: str | None = None
+_LAST_REFRESH_ERROR: str | None = None
+_LAST_SUCCESSFUL_REFRESH: str | None = None
 
 def get_cache_path() -> Path:
     """Return the cache file path (outside the repo by default)."""
@@ -120,6 +124,37 @@ def try_set_refreshing() -> bool:
         return True
 
 
+def set_last_error(error: str | None) -> None:
+    """Persist the last refresh error in memory."""
+    global _LAST_REFRESH_STATUS, _LAST_REFRESH_ERROR
+    with _REFRESH_METADATA_LOCK:
+        _LAST_REFRESH_STATUS = "failed" if error else "success"
+        _LAST_REFRESH_ERROR = error
+
+
+def get_refresh_metadata(cache_payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Return refresh metadata, favoring in-memory state."""
+    if cache_payload is None:
+        cached_status = None
+        cached_error = None
+        cached_success = None
+    else:
+        cached_status = cache_payload.get("last_refresh_status")
+        cached_error = cache_payload.get("last_refresh_error")
+        cached_success = cache_payload.get("last_successful_refresh")
+
+    with _REFRESH_METADATA_LOCK:
+        status = _LAST_REFRESH_STATUS or cached_status or "success"
+        error = _LAST_REFRESH_ERROR if _LAST_REFRESH_ERROR is not None else cached_error
+        last_success = _LAST_SUCCESSFUL_REFRESH or cached_success
+
+    return {
+        "refresh_status": status,
+        "last_error": error,
+        "last_successful_refresh": last_success,
+    }
+
+
 # ---------------------------------------------------------------------------
 # CACHE IO
 # ---------------------------------------------------------------------------
@@ -161,6 +196,11 @@ def load_cache() -> dict[str, Any] | None:
         )
 
         payload.setdefault("group_counts", _compute_group_counts(channels))
+        payload.setdefault("last_refresh_status", "success")
+        payload.setdefault("last_refresh_error", None)
+        payload.setdefault("last_successful_refresh", payload.get("timestamp"))
+
+        _sync_refresh_metadata(payload)
 
         LOGGER.debug("Channel cache loaded (%d channels)", len(channels))
         return payload
@@ -178,15 +218,19 @@ def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
     normalized = [_normalize_channel(ch) for ch in channels]
     group_counts = _compute_group_counts(normalized)
     stats = _compute_stats(normalized)
+    timestamp = _now().isoformat()
 
     payload = {
         "host": host,
-        "timestamp": _now().isoformat(),
+        "timestamp": timestamp,
         "channels": normalized,
         "channel_count": len(normalized),
         "stats": stats,
         "categories": sorted({ch["category"] for ch in normalized}),
         "group_counts": group_counts,
+        "last_refresh_status": "success",
+        "last_refresh_error": None,
+        "last_successful_refresh": timestamp,
     }
 
     cache_path = get_cache_path()
@@ -199,6 +243,16 @@ def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
         payload["channel_count"],
         len(payload["categories"]),
     )
+    _sync_refresh_metadata(payload)
+
+
+def _sync_refresh_metadata(payload: dict[str, Any]) -> None:
+    """Sync refresh metadata from payload into memory."""
+    global _LAST_REFRESH_STATUS, _LAST_REFRESH_ERROR, _LAST_SUCCESSFUL_REFRESH
+    with _REFRESH_METADATA_LOCK:
+        _LAST_REFRESH_STATUS = payload.get("last_refresh_status")
+        _LAST_REFRESH_ERROR = payload.get("last_refresh_error")
+        _LAST_SUCCESSFUL_REFRESH = payload.get("last_successful_refresh")
 
 
 # ---------------------------------------------------------------------------

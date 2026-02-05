@@ -141,7 +141,8 @@ def _refresh_job(credentials: CredentialsIn) -> None:
         LOGGER.info("Parsed %d channels", len(channels))
         cache.save_cache(credentials.host, channels)
 
-    except Exception:
+    except Exception as exc:
+        cache.set_last_error(str(exc))
         LOGGER.exception("Background refresh failed")
 
     finally:
@@ -180,6 +181,7 @@ def status() -> StatusResponse:
     """Return backend and cache status."""
 
     cached = cache.load_cache()
+    refresh_metadata = cache.get_refresh_metadata(cached)
 
     return StatusResponse(
         logged_in=auth.has_credentials(),
@@ -187,6 +189,9 @@ def status() -> StatusResponse:
         cache_available=cached is not None,
         last_refresh=cached.get("timestamp") if cached else None,
         channel_count=cached.get("channel_count", 0) if cached else 0,
+        refresh_status=refresh_metadata["refresh_status"],
+        last_error=refresh_metadata["last_error"],
+        last_successful_refresh=refresh_metadata["last_successful_refresh"],
     )
 
 

@@ -40,6 +40,9 @@ class StatusResponse(BaseModel):
     cache_available: bool
     last_refresh: str | None
     channel_count: int
+    refresh_status: str = "success"
+    last_error: str | None = None
+    last_successful_refresh: str | None = None
 
 
 class StatsResponse(BaseModel):
