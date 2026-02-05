@@ -18,11 +18,22 @@ def set_base_url(value: str) -> None:
     st.session_state["base_url"] = value.strip().rstrip("/")
 
 
-def call_api(method: str, path: str, payload: dict | None = None) -> tuple[dict | list | None, str | None]:
+def call_api(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    params: dict | None = None,
+) -> tuple[dict | list | None, str | None]:
     """Make a request to the backend and handle errors gracefully."""
     url = f"{get_base_url()}{path}"
     try:
-        response = requests.request(method, url, json=payload, timeout=10)
+        response = requests.request(
+            method,
+            url,
+            json=payload,
+            params=params,
+            timeout=10,
+        )
         response.raise_for_status()
         return response.json(), None
     except requests.exceptions.RequestException as exc:
@@ -45,16 +56,24 @@ st.write("Check backend status and cached data.")
 
 if st.button("Check status", key="status_button"):
     status_data, status_error = call_api("GET", "/status")
-    if status_error:
-        st.error(status_error)
-    elif isinstance(status_data, dict):
+    stats_data, stats_error = call_api("GET", "/stats")
+    if status_error or stats_error:
+        st.error(status_error or stats_error)
+    elif isinstance(status_data, dict) and isinstance(stats_data, dict):
         st.success("Status retrieved.")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Total", stats_data.get("total", 0))
+        col2.metric("TV", stats_data.get("tv", 0))
+        col3.metric("Movies", stats_data.get("movies", 0))
+        col4.metric("Series", stats_data.get("series", 0))
+        col5.metric("Other", stats_data.get("other", 0))
         st.json(
             {
                 "logged_in": status_data.get("logged_in"),
                 "cache_available": status_data.get("cache_available"),
                 "channel_count": status_data.get("channel_count"),
                 "last_refresh": status_data.get("last_refresh"),
+                "refreshing": status_data.get("refreshing"),
             }
         )
     else:
@@ -102,11 +121,14 @@ st.subheader("Refresh Panel")
 st.write("Refresh channels and update cache.")
 
 if st.button("Refresh channels", key="refresh_button"):
-    refresh_data, refresh_error = call_api("POST", "/refresh")
+    with st.spinner("Refreshing channels..."):
+        refresh_data, refresh_error = call_api("POST", "/refresh")
     if refresh_error:
         st.error(refresh_error)
+    elif isinstance(refresh_data, dict) and refresh_data.get("status") == "already_running":
+        st.info("Refresh already in progress.")
     else:
-        st.success("Refresh completed.")
+        st.success("Refresh started.")
         st.json(refresh_data)
 
 st.divider()
@@ -118,32 +140,40 @@ st.subheader("Channel Browser")
 st.write("Search available channels.")
 
 search_term = st.text_input("Search", value="", placeholder="UFC, Paramount, News...")
+page = st.number_input("Page", min_value=1, value=1)
+page_size = st.number_input("Page size", min_value=1, max_value=100, value=50)
+categories_data, categories_error = call_api("GET", "/groups")
+categories = ["all"]
+if isinstance(categories_data, dict):
+    categories.extend(categories_data.get("categories", []))
+category = st.selectbox("Category", categories)
 
 if st.button("Search", key="search_button"):
-    channels_data, channels_error = call_api("GET", "/channels")
+    params = {"page": int(page), "page_size": int(page_size)}
+    if search_term:
+        params["search"] = search_term
+    if category and category != "all":
+        params["category"] = category
+    channels_data, channels_error = call_api("GET", "/channels", params=params)
     if channels_error:
         st.error(channels_error)
     else:
-        if isinstance(channels_data, dict) and "channels" in channels_data:
-            channels = channels_data.get("channels", [])
-        else:
-            channels = channels_data if isinstance(channels_data, list) else []
+        channels = (
+            channels_data.get("channels", [])
+            if isinstance(channels_data, dict)
+            else []
+        )
 
-        filtered = [
-            channel
-            for channel in channels
-            if search_term.lower() in str(channel.get("name", "")).lower()
-        ]
-
-        st.write(f"Channel count: {len(filtered)}")
-        if filtered:
+        st.write(f"Channel count: {channels_data.get('total', 0)}")
+        if channels:
             st.table(
                 [
                     {
                         "name": channel.get("name"),
-                        "group": channel.get("group") or channel.get("category"),
+                        "group": channel.get("group"),
+                        "category": channel.get("category"),
                     }
-                    for channel in filtered
+                    for channel in channels
                 ]
             )
         else:
