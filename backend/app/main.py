@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import get_settings
 from backend.app.routes.channels import router as channels_router
+from backend.app.services import auth
 from backend.app.utils.logging import configure_logging
 
 LOGGER = logging.getLogger(__name__)
@@ -44,6 +45,8 @@ async def lifespan(app: FastAPI):
             route.name,
             endpoint,
         )
+    if auth.load_credentials_from_file(settings.credentials_file):
+        LOGGER.info("Credentials loaded from file during startup.")
     yield
 
     LOGGER.info("Application shutdown")
