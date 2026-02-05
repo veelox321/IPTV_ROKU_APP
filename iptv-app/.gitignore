@@ -18,4 +18,4 @@ backend/app/data/channels.json
 
 # IPTV runtime cache
 iptv-app/backend/data/
-*.json
+iptv-app/backend/data/*.json
