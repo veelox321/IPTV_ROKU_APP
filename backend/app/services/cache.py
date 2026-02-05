@@ -17,8 +17,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from backend.app.config import get_settings
 from backend.app.services import iptv
+from backend.app.utils.cache_utils import get_cache_path
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,12 +29,6 @@ LOGGER = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
 _REFRESH_LOCK = threading.Lock()
 _REFRESHING = False
-
-def get_cache_path() -> Path:
-    """Return the cache file path (outside the repo by default)."""
-    settings = get_settings()
-    return settings.cache_dir / "channels.json"
-
 
 # ---------------------------------------------------------------------------
 # INTERNAL HELPERS

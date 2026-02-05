@@ -1,78 +1,20 @@
-# IPTV Roku App (Refactored)
+# IPTV ROKU App
 
-Production-ready IPTV stack with a FastAPI backend, a TV-first React UI, and a Streamlit admin console.
+A FastAPI IPTV backend with platform-agnostic frontends (web + Streamlit) that honor a strict login → refresh → ready flow.
 
-## Repository Structure
+## Quick Start
 
-```
-IPTV_ROKU_APP/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── models.py
-│   │   ├── routes/
-│   │   │   └── channels.py
-│   │   ├── services/
-│   │   │   ├── auth.py
-│   │   │   ├── cache.py
-│   │   │   └── iptv.py
-│   │   └── utils/
-│   │       └── logging.py
-│   └── requirements.txt
-├── frontend-web/
-│   ├── public/
-│   ├── src/
-│   ├── package.json
-│   └── vite.config.ts
-├── frontend-streamlit/
-│   ├── app.py
-│   ├── components.py
-│   └── README.md
-├── docs/
-│   ├── architecture.md
-│   ├── api.md
-│   └── figma-to-code.md
-├── .gitignore
-└── README.md
-```
-
-## Backend (FastAPI)
-
-### Setup
+### Backend
 
 ```bash
+cd backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Run
-
-```bash
-uvicorn backend.app.main:app --reload
-```
-
-### Environment Variables
-
-Create `backend/.env` (optional):
-
-```
-CACHE_DIR=/path/to/cache
-CACHE_TTL_SECONDS=21600
-VERIFY_SSL=true
-DEBUG=false
-```
-
-Credentials are supplied at runtime via `POST /login` and are held in memory only.
-
-### Cache Location
-
-Channel cache files are written outside the repository by default to
-`~/.cache/iptv_roku_app/channels.json` (or the directory specified by `CACHE_DIR`).
-
-## Web Frontend (Main UI)
+### Web UI
 
 ```bash
 cd frontend-web
@@ -80,19 +22,51 @@ npm install
 npm run dev
 ```
 
-Optional `.env`:
-
-```
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-## Streamlit Admin UI
+### Streamlit Admin Console
 
 ```bash
 cd frontend-streamlit
 streamlit run app.py
 ```
 
-## Docs
+> **Note:** The backend requirements already include Streamlit.
 
-See `docs/architecture.md` for system design, `docs/api.md` for endpoint details, and `docs/figma-to-code.md` for frontend integration guidance.
+## Login & Refresh Flow
+
+1. **Login**
+   - `POST /login` is the only way to set credentials.
+   - Credentials live **in memory only** (no disk persistence).
+2. **Refresh**
+   - `POST /refresh` starts a background cache refresh **only if logged in**.
+   - Returns `409` if not logged in or if a refresh is already running.
+3. **Status**
+   - `GET /status` is the single source of truth for UI state.
+
+## Why Channels Might Be Empty
+
+- The channel cache is **not** stored in the git repo.
+- If the cache is missing, `/channels` returns an empty list and `/stats` returns zero counts.
+- This is expected until a refresh completes.
+
+## Cache Location
+
+Channel caches are stored outside the repo by default:
+
+- `~/.cache/iptv_roku_app/channels.json`
+
+Override with `CACHE_DIR` if needed, but keep it out of git-tracked paths.
+
+## API Summary
+
+- `POST /login`
+- `POST /refresh`
+- `GET /status`
+- `GET /channels`
+- `GET /stats`
+- `GET /groups`
+- `GET /health`
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [FLOW.md](FLOW.md)

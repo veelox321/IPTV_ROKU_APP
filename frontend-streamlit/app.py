@@ -31,8 +31,10 @@ with st.sidebar:
     st.header("Admin Controls")
     api_url = st.text_input("Backend API URL", value=DEFAULT_API_URL).rstrip("/")
 
+    status_payload, status_error = fetch_status(api_url)
+
     st.divider()
-    st.subheader("Login (optional)")
+    st.subheader("Login")
     host = st.text_input("IPTV Host", placeholder="https://provider.example")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -50,17 +52,26 @@ with st.sidebar:
                 st.error(error)
             else:
                 st.success("Credentials accepted.")
+        fetch_status.clear()
 
     st.divider()
 
-    if st.button("Refresh channel cache"):
-        payload, error = request_json("POST", f"{api_url}/refresh", payload={})
-        if error:
-            st.error(error)
-        elif payload and payload.get("status") == "already_running":
+    if st.button(
+        "Refresh channel cache",
+        disabled=not status_payload or not status_payload.get("logged_in"),
+    ):
+        if not status_payload:
+            st.warning(status_error or "Unable to fetch status.")
+        elif not status_payload.get("logged_in"):
+            st.warning("Login is required before refreshing the cache.")
+        elif status_payload.get("refreshing"):
             st.info("Refresh already in progress.")
         else:
-            st.success("Refresh started.")
+            payload, error = request_json("POST", f"{api_url}/refresh", payload={})
+            if error:
+                st.error(error)
+            else:
+                st.success("Refresh started.")
         fetch_status.clear()
         fetch_stats.clear()
         fetch_groups.clear()
