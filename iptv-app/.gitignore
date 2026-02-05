@@ -15,3 +15,7 @@ venv/
 
 # Cache/data
 backend/app/data/channels.json
+
+# IPTV runtime cache
+iptv-app/backend/data/
+*.json
