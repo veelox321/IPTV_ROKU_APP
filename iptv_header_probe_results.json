@@ -1,0 +1,222 @@
+{
+  "generated_at": "2026-02-02T00:52:59.952422Z",
+  "endpoint": "http://link4tv.me/player_api.php",
+  "params": {
+    "username": "KL***",
+    "password": "KL***",
+    "action": "get_live_streams"
+  },
+  "verify_ssl": true,
+  "timeout_seconds": 15,
+  "results": [
+    {
+      "timestamp": "2026-02-02T00:52:59.512022Z",
+      "name": "default_requests_headers",
+      "headers": "<default requests headers>",
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 78,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.601102Z",
+      "name": "minimal_accept_json",
+      "headers": {
+        "Accept": "application/json, text/plain, */*"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 30,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.626125Z",
+      "name": "chrome_like",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-CH-UA": "\"Chromium\";v=\"123\", \"Not:A-Brand\";v=\"8\"",
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": "\"Windows\""
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 30,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.654150Z",
+      "name": "firefox_like",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 32,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.683177Z",
+      "name": "safari_like",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Safari/605.1.15",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-us",
+        "Connection": "keep-alive"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 31,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.715207Z",
+      "name": "smarters_pro",
+      "headers": {
+        "User-Agent": "SmartersPro/1.0 (Android)",
+        "Accept": "application/json",
+        "Connection": "keep-alive"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 15,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.744232Z",
+      "name": "tivimate",
+      "headers": {
+        "User-Agent": "TiviMate/4.6.1 (Android TV)",
+        "Accept": "application/json",
+        "Connection": "keep-alive"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 45,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.778263Z",
+      "name": "vlc",
+      "headers": {
+        "User-Agent": "VLC/3.0.18 LibVLC/3.0.18",
+        "Accept": "*/*",
+        "Connection": "close"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 32,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.809292Z",
+      "name": "android_webview",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 12; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+        "Referer": "https://example.com/"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 15,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.837317Z",
+      "name": "referer_only",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://example.com/portal"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 32,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.863341Z",
+      "name": "referrer_header",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referrer": "https://example.com/portal"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 30,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.896371Z",
+      "name": "no_accept_language",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Connection": "keep-alive"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 31,
+      "response_text": null
+    },
+    {
+      "timestamp": "2026-02-02T00:52:59.925397Z",
+      "name": "close_connection",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+        "Accept": "application/json, text/plain, */*",
+        "Connection": "close"
+      },
+      "status_code": null,
+      "success": false,
+      "error_type": "ConnectionError",
+      "error_message": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "elapsed_ms": 30,
+      "response_text": null
+    }
+  ]
+}

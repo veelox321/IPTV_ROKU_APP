@@ -54,7 +54,6 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
             timeout=20,
             verify=False,
             allow_redirects=True,
-            trust_env=False,
         )
     except requests.exceptions.SSLError as exc:
         LOGGER.exception("SSL error during M3U download.")
@@ -82,34 +81,44 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
         raise RuntimeError("Empty M3U playlist received from IPTV provider")
     return playlist_text
 
+GROUP_RE = re.compile(r'group-title="([^"]+)"')
 
-def parse_m3u(playlist_text: str) -> list[dict[str, Any]]:
-    channels: list[dict[str, Any]] = []
-    pending_name: str | None = None
+def parse_m3u(playlist_text: str) -> list[dict]:
+    channels = []
+    pending = None
 
     for line in playlist_text.splitlines():
-        stripped = line.strip()
-        if not stripped:
+        line = line.strip()
+        if not line:
             continue
-        if stripped.startswith("#EXTINF"):
-            match = EXTINF_RE.match(stripped)
-            pending_name = match.group(1).strip() if match else None
-            continue
-        if stripped.startswith("#"):
-            continue
-        if pending_name:
-            channels.append({"name": pending_name, "url": stripped})
-            pending_name = None
 
-    LOGGER.debug("Parsed M3U channels count=%s", len(channels))
+        if line.startswith("#EXTINF"):
+            name_match = EXTINF_RE.search(line)
+            group_match = GROUP_RE.search(line)
+
+            pending = {
+                "name": name_match.group(1).strip() if name_match else "Unknown",
+                "group": group_match.group(1).lower() if group_match else "unknown",
+            }
+            continue
+
+        if line.startswith("#"):
+            continue
+
+        if pending:
+            pending["url"] = line
+            channels.append(pending)
+            pending = None
+
     return channels
+
 
 
 def filter_channels(
     channels: Iterable[dict[str, Any]], keywords: Iterable[str] | None = None
 ) -> list[dict[str, Any]]:
     if not keywords:
-        keywords = DEFAULT_FILTER_KEYWORDS
+        return list(channels)
     lowered = [keyword.lower() for keyword in keywords]
     filtered = [
         channel
@@ -118,3 +127,25 @@ def filter_channels(
     ]
     LOGGER.debug("Filtered channels count=%s keywords=%s", len(filtered), lowered)
     return filtered
+
+CATEGORY_MAP = {
+    "tv": ["tv", "live"],
+    "movies": ["movie", "vod", "film"],
+    "series": ["series", "show"],
+}
+
+def count_categories(channels: list[dict]) -> dict[str, int]:
+    counts = {"tv": 0, "movies": 0, "series": 0, "other": 0}
+
+    for ch in channels:
+        group = ch.get("group", "")
+        matched = False
+        for cat, keys in CATEGORY_MAP.items():
+            if any(k in group for k in keys):
+                counts[cat] += 1
+                matched = True
+                break
+        if not matched:
+            counts["other"] += 1
+
+    return counts

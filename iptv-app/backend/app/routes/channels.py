@@ -46,40 +46,41 @@ def get_channels(search: str | None = Query(default=None, min_length=1)) -> dict
 
     return {"channels": channels, "cached": True, "total": len(channels)}
 
-
-@router.post("/refresh")
-def refresh_channels() -> dict[str, str | int]:
-    """Force refresh the channel cache."""
-
-    if not auth.has_credentials():
-        LOGGER.debug("Refresh request rejected: missing credentials.")
-        raise HTTPException(
-            status_code=400,
-            detail="Credentials required. Provide via /login or env settings.",
-        )
-
-    credentials = auth.get_credentials()
-    if credentials is None:
-        LOGGER.debug("Refresh request rejected: credentials unavailable.")
-        raise HTTPException(status_code=400, detail="Credentials not found.")
+def _refresh_job(credentials: CredentialsIn) -> None:
+    LOGGER.info("Background refresh started")
+    cache.set_refreshing(True)
 
     try:
         playlist_text = iptv.fetch_m3u(credentials)
         channels = iptv.parse_m3u(playlist_text)
-        LOGGER.debug("Parsed channels count=%s", len(channels))
-        channels = iptv.filter_channels(channels)
-    except RuntimeError as exc:
-        LOGGER.exception("IPTV refresh failed.")
-        cached = cache.load_cache()
-        if cached:
-            cached_channels = cached.get("channels", [])
-            LOGGER.debug("Returning partial response from cache count=%s.", len(cached_channels))
-            return {"status": "partial", "total": len(cached_channels)}
-        raise HTTPException(status_code=502, detail=str(exc))
 
-    cache.save_cache(credentials.host, channels)
-    LOGGER.debug("Channel cache updated after refresh.")
-    return {"status": "ok", "total": len(channels)}
+        LOGGER.info("Parsed %d channels", len(channels))
+
+        cache.save_cache(credentials.host, channels)
+
+    except Exception:
+        LOGGER.exception("Background refresh failed")
+
+    finally:
+        cache.set_refreshing(False)
+        LOGGER.info("Background refresh finished")
+
+
+from fastapi import BackgroundTasks
+
+@router.post("/refresh")
+def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
+    if not auth.has_credentials():
+        raise HTTPException(status_code=400, detail="Credentials required.")
+
+    if cache.is_refreshing():
+        return {"status": "already_running"}
+
+    credentials = auth.get_credentials()
+    background_tasks.add_task(_refresh_job, credentials)
+
+    return {"status": "started"}
+
 
 
 @router.get("/status")
@@ -99,8 +100,18 @@ def status() -> dict[str, object]:
         channel_count,
     )
     return {
-        "logged_in": logged_in,
-        "cache_available": cache_available,
-        "last_refresh": last_refresh,
-        "channel_count": channel_count,
+        "logged_in": auth.has_credentials(),
+        "refreshing": cache.is_refreshing(),
+        "cache_available": cached is not None,
+        "last_refresh": cached.get("timestamp") if cached else None,
+        "channel_count": len(cached.get("channels", [])) if cached else 0,
     }
+
+@router.get("/stats")
+def channel_stats() -> dict[str, int]:
+    cached = cache.load_cache()
+    if not cached:
+        raise HTTPException(404, "No cache available")
+
+    channels = cached.get("channels", [])
+    return iptv.count_categories(channels)

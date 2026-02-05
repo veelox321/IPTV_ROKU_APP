@@ -8,8 +8,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import threading
+
+_refresh_lock = threading.Lock()
+_refreshing = False
+
 CACHE_PATH = Path(__file__).resolve().parents[2] / "data" / "channels.json"
 LOGGER = logging.getLogger(__name__)
+def is_refreshing() -> bool:
+    with _refresh_lock:
+        return _refreshing
+
+
+def set_refreshing(value: bool) -> None:
+    global _refreshing
+    with _refresh_lock:
+        _refreshing = value
 
 
 def _now() -> datetime:
