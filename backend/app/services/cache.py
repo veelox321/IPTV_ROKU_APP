@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -33,6 +36,14 @@ _REFRESH_METADATA_LOCK = threading.Lock()
 _LAST_REFRESH_STATUS: str | None = None
 _LAST_REFRESH_ERROR: str | None = None
 _LAST_SUCCESSFUL_REFRESH: str | None = None
+_REFRESH_STARTED_AT: str | None = None
+_LOAD_LOG_COUNT = 0
+_LOAD_LOG_LIMIT = 5
+_CACHE_SCHEMA_VERSION = 1
+_CREATED_BY = "iptv-backend"
+
+_CACHE_PATH = get_cache_path().resolve()
+LOGGER.info("Cache path configured: %s", _CACHE_PATH)
 
 def get_cache_path() -> Path:
     """Return the cache file path (outside the repo by default)."""
@@ -49,13 +60,29 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+def _atomic_write(path: Path, payload: dict[str, Any]) -> int:
     """Write JSON payload to disk atomically."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
+    start = time.monotonic()
     with tmp.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+        fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+        size = fh.tell()
     tmp.replace(path)
+    elapsed = time.monotonic() - start
+    if get_settings().debug:
+        LOGGER.info(
+            "Atomic write complete tmp=%s final=%s bytes=%d elapsed=%.2fs exists=%s",
+            tmp.resolve(),
+            path.resolve(),
+            size,
+            elapsed,
+            path.exists(),
+        )
+    return size
 
 
 def _normalize_channel(channel: dict[str, Any]) -> dict[str, Any]:
@@ -109,18 +136,20 @@ def is_refreshing() -> bool:
 
 def set_refreshing(value: bool) -> None:
     """Set the refresh-in-progress flag."""
-    global _REFRESHING
+    global _REFRESHING, _REFRESH_STARTED_AT
     with _REFRESH_LOCK:
         _REFRESHING = value
+        _REFRESH_STARTED_AT = _now().isoformat() if value else None
 
 
 def try_set_refreshing() -> bool:
     """Atomically set the refreshing flag if not already set."""
-    global _REFRESHING
+    global _REFRESHING, _REFRESH_STARTED_AT
     with _REFRESH_LOCK:
         if _REFRESHING:
             return False
         _REFRESHING = True
+        _REFRESH_STARTED_AT = _now().isoformat()
         return True
 
 
@@ -130,6 +159,12 @@ def set_last_error(error: str | None) -> None:
     with _REFRESH_METADATA_LOCK:
         _LAST_REFRESH_STATUS = "failed" if error else "success"
         _LAST_REFRESH_ERROR = error
+
+
+def get_refresh_started_at() -> str | None:
+    """Return the timestamp when refresh was set in motion."""
+    with _REFRESH_LOCK:
+        return _REFRESH_STARTED_AT
 
 
 def get_refresh_metadata(cache_payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -162,12 +197,28 @@ def get_refresh_metadata(cache_payload: dict[str, Any] | None) -> dict[str, Any]
 
 def load_cache() -> dict[str, Any] | None:
     """Load cached channel data from disk."""
+    global _LOAD_LOG_COUNT
     cache_path = get_cache_path()
+    should_log = get_settings().debug or _LOAD_LOG_COUNT < _LOAD_LOG_LIMIT
+    if should_log:
+        _LOAD_LOG_COUNT += 1
     if not cache_path.exists():
+        if should_log:
+            LOGGER.info(
+                "Cache read attempt: path=%s exists=false",
+                cache_path.resolve(),
+            )
         LOGGER.debug("Channel cache not found at %s", cache_path)
         return None
 
     try:
+        if should_log:
+            size_bytes = cache_path.stat().st_size
+            LOGGER.info(
+                "Cache read attempt: path=%s exists=true size_bytes=%s",
+                cache_path.resolve(),
+                size_bytes,
+            )
         with _CACHE_LOCK, cache_path.open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
 
@@ -196,12 +247,21 @@ def load_cache() -> dict[str, Any] | None:
         )
 
         payload.setdefault("group_counts", _compute_group_counts(channels))
+        payload.setdefault("cache_header", {})
         payload.setdefault("last_refresh_status", "success")
         payload.setdefault("last_refresh_error", None)
         payload.setdefault("last_successful_refresh", payload.get("timestamp"))
 
         _sync_refresh_metadata(payload)
 
+        if should_log:
+            LOGGER.info(
+                "Cache loaded: keys=%s channel_count=%s timestamp=%s host=%s",
+                sorted(payload.keys()),
+                payload.get("channel_count"),
+                payload.get("timestamp"),
+                payload.get("host"),
+            )
         LOGGER.debug("Channel cache loaded (%d channels)", len(channels))
         return payload
 
@@ -215,6 +275,7 @@ def load_cache() -> dict[str, Any] | None:
 
 def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
     """Persist channels and precomputed metadata to disk."""
+    started_at = time.monotonic()
     normalized = [_normalize_channel(ch) for ch in channels]
     group_counts = _compute_group_counts(normalized)
     stats = _compute_stats(normalized)
@@ -228,6 +289,13 @@ def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
         "stats": stats,
         "categories": sorted({ch["category"] for ch in normalized}),
         "group_counts": group_counts,
+        "cache_header": {
+            "schema_version": _CACHE_SCHEMA_VERSION,
+            "created_by": _CREATED_BY,
+            "pid": os.getpid(),
+            "cwd": os.getcwd(),
+            "python_executable": sys.executable,
+        },
         "last_refresh_status": "success",
         "last_refresh_error": None,
         "last_successful_refresh": timestamp,
@@ -235,13 +303,17 @@ def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
 
     cache_path = get_cache_path()
     with _CACHE_LOCK:
-        _atomic_write(cache_path, payload)
+        bytes_written = _atomic_write(cache_path, payload)
 
+    elapsed = time.monotonic() - started_at
     LOGGER.info(
-        "Channel cache saved host=%s channels=%d categories=%d",
+        "Channel cache saved host=%s channels=%d categories=%d bytes=%d elapsed=%.2fs path=%s",
         host,
         payload["channel_count"],
         len(payload["categories"]),
+        bytes_written,
+        elapsed,
+        cache_path.resolve(),
     )
     _sync_refresh_metadata(payload)
 

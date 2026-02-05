@@ -4,7 +4,10 @@ FastAPI application entrypoint.
 
 from contextlib import asynccontextmanager
 import logging
+import os
+import sys
 import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,11 +25,25 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
     configure_logging(settings.debug)
-    LOGGER.debug("Application startup.")
+    instance_id = uuid.uuid4().hex
+    app.state.instance_id = instance_id
+    LOGGER.info(
+        "Application startup instance_id=%s cwd=%s sys_path_0=%s",
+        instance_id,
+        os.getcwd(),
+        sys.path[0],
+    )
     for route in app.router.routes:
         methods = getattr(route, "methods", None)
         methods_str = ",".join(sorted(methods)) if methods else "N/A"
-        LOGGER.info("Registered route: %s %s", methods_str, route.path)
+        endpoint = getattr(route.endpoint, "__module__", None)
+        LOGGER.info(
+            "Registered route: %s %s name=%s endpoint=%s",
+            methods_str,
+            route.path,
+            route.name,
+            endpoint,
+        )
     yield
 
     LOGGER.info("Application shutdown")
