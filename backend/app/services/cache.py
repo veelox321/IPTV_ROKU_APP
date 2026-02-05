@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from backend.app.config import get_settings
 from backend.app.services import iptv
 
 LOGGER = logging.getLogger(__name__)
@@ -29,7 +30,10 @@ _CACHE_LOCK = threading.Lock()
 _REFRESH_LOCK = threading.Lock()
 _REFRESHING = False
 
-CACHE_PATH = Path(__file__).resolve().parents[2] / "data" / "channels.json"
+def get_cache_path() -> Path:
+    """Return the cache file path (outside the repo by default)."""
+    settings = get_settings()
+    return settings.cache_dir / "channels.json"
 
 
 # ---------------------------------------------------------------------------
@@ -123,12 +127,13 @@ def try_set_refreshing() -> bool:
 
 def load_cache() -> dict[str, Any] | None:
     """Load cached channel data from disk."""
-    if not CACHE_PATH.exists():
-        LOGGER.debug("Channel cache not found at %s", CACHE_PATH)
+    cache_path = get_cache_path()
+    if not cache_path.exists():
+        LOGGER.debug("Channel cache not found at %s", cache_path)
         return None
 
     try:
-        with _CACHE_LOCK, CACHE_PATH.open("r", encoding="utf-8") as fh:
+        with _CACHE_LOCK, cache_path.open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
 
         channels = payload.get("channels")
@@ -184,8 +189,9 @@ def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
         "group_counts": group_counts,
     }
 
+    cache_path = get_cache_path()
     with _CACHE_LOCK:
-        _atomic_write(CACHE_PATH, payload)
+        _atomic_write(cache_path, payload)
 
     LOGGER.info(
         "Channel cache saved host=%s channels=%d categories=%d",

@@ -20,8 +20,6 @@ IPTV_ROKU_APP/
 │   │   │   └── iptv.py
 │   │   └── utils/
 │   │       └── logging.py
-│   ├── data/
-│   │   └── channels.json
 │   └── requirements.txt
 ├── frontend-web/
 │   ├── public/
@@ -58,16 +56,21 @@ uvicorn backend.app.main:app --reload
 
 ### Environment Variables
 
-Create `backend/.env`:
+Create `backend/.env` (optional):
 
 ```
-IPTV_HOST=https://provider.example
-IPTV_USERNAME=user
-IPTV_PASSWORD=pass
+CACHE_DIR=/path/to/cache
 CACHE_TTL_SECONDS=21600
 VERIFY_SSL=true
 DEBUG=false
 ```
+
+Credentials are supplied at runtime via `POST /login` and are held in memory only.
+
+### Cache Location
+
+Channel cache files are written outside the repository by default to
+`~/.cache/iptv_roku_app/channels.json` (or the directory specified by `CACHE_DIR`).
 
 ## Web Frontend (Main UI)
 

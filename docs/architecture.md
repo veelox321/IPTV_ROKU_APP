@@ -8,8 +8,9 @@ This repository is organized into three independent surfaces:
 
 ## Data Flow
 
-1. Admin configures IPTV credentials (via `.env` or `/login`).
-2. Backend refreshes the playlist and writes cache metadata to `backend/data/channels.json`.
+1. Admin configures IPTV credentials via `POST /login` (in-memory only).
+2. Backend refreshes the playlist and writes cache metadata to the external cache directory
+   (defaults to `~/.cache/iptv_roku_app/channels.json` or `CACHE_DIR`).
 3. Web UI fetches `GET /channels`, `GET /stats`, and `GET /status` to render tiles.
 
 ## Key Decisions
