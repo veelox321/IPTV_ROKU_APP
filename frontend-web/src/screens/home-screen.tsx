@@ -3,11 +3,27 @@ import { useNavigate } from "react-router";
 import { TVButton } from "../components/tv-button";
 import { TVInstructions } from "../components/tv-instructions";
 import { Tv, Film, Clapperboard, Activity, Grid3x3, RefreshCw } from "lucide-react";
+import { getStats, getStatus, refreshChannels } from "../services/api";
 
 export function HomeScreen() {
   const navigate = useNavigate();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [status, setStatus] = useState<{
+    loggedIn: boolean;
+    refreshing: boolean;
+    channelCount: number;
+    lastRefresh: string | null;
+  } | null>(null);
+  const [stats, setStats] = useState<{
+    total: number;
+    tv: number;
+    movies: number;
+    series: number;
+    other: number;
+  } | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -51,6 +67,38 @@ export function HomeScreen() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [focusedIndex]);
 
+  useEffect(() => {
+    const loadStatus = async () => {
+      try {
+        const [statusPayload, statsPayload] = await Promise.all([
+          getStatus(),
+          getStats(),
+        ]);
+        setStatus({
+          loggedIn: statusPayload.logged_in,
+          refreshing: statusPayload.refreshing,
+          channelCount: statusPayload.channel_count,
+          lastRefresh: statusPayload.last_refresh,
+        });
+        setStats({
+          total: statsPayload.total,
+          tv: statsPayload.tv,
+          movies: statsPayload.movies,
+          series: statsPayload.series,
+          other: statsPayload.other,
+        });
+        setStatusError(null);
+        setStatsError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to fetch status.";
+        setStatusError(message);
+        setStatsError(message);
+      }
+    };
+
+    loadStatus();
+  }, []);
+
   const handleSelect = (index: number) => {
     switch (index) {
       case 0:
@@ -69,63 +117,58 @@ export function HomeScreen() {
         printStatus();
         break;
       case 5:
-        refreshChannels();
+        refreshChannelsNow();
         break;
     }
   };
 
   const printStatus = () => {
-    const status = {
+    const statusPayload = {
       timestamp: new Date().toLocaleString(),
-      system: "IPTV v1.0",
-      resolution: "1920x1080",
-      connection: "Online",
-      channels: 20,
-      movies: 20,
-      series: 20,
-      otherChannels: 20,
-      uptime: "Connected",
-      performance: "Optimal",
+      loggedIn: status?.loggedIn ?? false,
+      refreshing: status?.refreshing ?? false,
+      lastRefresh: status?.lastRefresh ?? "n/a",
+      channels: status?.channelCount ?? 0,
+      totals: stats ?? {
+        total: 0,
+        tv: 0,
+        movies: 0,
+        series: 0,
+        other: 0,
+      },
     };
-    
+
     console.log("=== SYSTEM STATUS ===");
-    console.log(JSON.stringify(status, null, 2));
+    console.log(JSON.stringify(statusPayload, null, 2));
     console.log("====================");
   };
 
-  const refreshChannels = async () => {
+  const refreshChannelsNow = async () => {
     setIsRefreshing(true);
     console.log("=== REFRESHING CHANNELS ===");
-    console.log("Fetching latest channel list...");
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const refreshData = {
-      timestamp: new Date().toLocaleString(),
-      liveChannels: 20,
-      movies: 20,
-      series: 20,
-      otherChannels: 20,
-      totalContent: 80,
-      status: "Success",
-      message: "All channels refreshed successfully"
-    };
-    
-    console.log("Refresh completed:");
-    console.log(JSON.stringify(refreshData, null, 2));
-    console.log("===========================");
-    
-    setIsRefreshing(false);
+
+    try {
+      const response = await refreshChannels();
+      console.log("Refresh response:", response);
+    } catch (error) {
+      console.error("Refresh failed:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-12">
       <TVInstructions />
       <div className="max-w-7xl w-full">
-        <h1 className="text-6xl font-bold text-white text-center mb-16">
-          IPTV
-        </h1>
+        <h1 className="text-6xl font-bold text-white text-center mb-4">IPTV</h1>
+        <p className="text-center text-zinc-400 text-xl mb-12">
+          {statusError || statsError
+            ? "Backend unreachable"
+            : `Channels: ${stats?.total ?? 0} · Live: ${stats?.tv ?? 0} · Movies: ${
+                stats?.movies ?? 0
+              } · Series: ${stats?.series ?? 0}`}
+        </p>
         <div className="flex gap-12 justify-center items-center mb-16">
           <TVButton
             focused={focusedIndex === 0}

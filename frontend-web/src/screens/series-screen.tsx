@@ -1,23 +1,22 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { MovieCard } from "../components/movie-card";
+import { SeriesCard } from "../components/series-card";
 import { TVInstructions } from "../components/tv-instructions";
 import { TVSearchBox } from "../components/tv-search-box";
-import { movies } from "../data/mock-data";
 import { ArrowLeft } from "lucide-react";
+import { useChannels } from "../hooks/use-channels";
 
-export function MoviesScreen() {
+export function SeriesScreen() {
   const navigate = useNavigate();
   const [focusedIndex, setFocusedIndex] = useState(-1); // Start at search box
   const [searchQuery, setSearchQuery] = useState("");
   const COLUMNS = 6;
 
-  const filteredMovies = useMemo(() => {
-    if (!searchQuery.trim()) return movies;
-    return movies.filter((movie) =>
-      movie.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery]);
+  const { channels, error, loading } = useChannels({
+    category: "series",
+    search: searchQuery,
+    pageSize: 60,
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -26,7 +25,7 @@ export function MoviesScreen() {
         switch (e.key) {
           case "ArrowDown":
             e.preventDefault();
-            if (filteredMovies.length > 0) {
+            if (channels.length > 0) {
               setFocusedIndex(0);
             }
             break;
@@ -47,9 +46,7 @@ export function MoviesScreen() {
             break;
           case "ArrowRight":
             e.preventDefault();
-            setFocusedIndex((prev) =>
-              Math.min(filteredMovies.length - 1, prev + 1)
-            );
+            setFocusedIndex((prev) => Math.min(channels.length - 1, prev + 1));
             break;
           case "ArrowUp":
             e.preventDefault();
@@ -63,7 +60,7 @@ export function MoviesScreen() {
           case "ArrowDown":
             e.preventDefault();
             setFocusedIndex((prev) =>
-              Math.min(filteredMovies.length - 1, prev + COLUMNS)
+              Math.min(channels.length - 1, prev + COLUMNS)
             );
             break;
           case "Backspace":
@@ -73,7 +70,7 @@ export function MoviesScreen() {
             break;
           case "Enter":
             e.preventDefault();
-            console.log("Selected movie:", filteredMovies[focusedIndex]);
+            console.log("Selected series:", channels[focusedIndex]);
             break;
         }
       }
@@ -81,7 +78,7 @@ export function MoviesScreen() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusedIndex, searchQuery, filteredMovies, navigate]);
+  }, [focusedIndex, searchQuery, channels, navigate]);
 
   return (
     <div className="min-h-screen bg-zinc-950 p-12">
@@ -94,7 +91,7 @@ export function MoviesScreen() {
           >
             <ArrowLeft className="w-8 h-8" />
           </button>
-          <h1 className="text-5xl font-bold text-white">Movies</h1>
+          <h1 className="text-5xl font-bold text-white">Series</h1>
         </div>
 
         <div className="mb-8">
@@ -103,29 +100,30 @@ export function MoviesScreen() {
             onChange={setSearchQuery}
             focused={focusedIndex === -1}
             onFocus={() => setFocusedIndex(-1)}
-            placeholder="Search movies..."
+            placeholder="Search series..."
           />
         </div>
 
-        {filteredMovies.length > 0 ? (
+        {loading ? (
+          <div className="text-center text-zinc-400 text-2xl py-20">Loading…</div>
+        ) : error ? (
+          <div className="text-center text-red-400 text-2xl py-20">{error}</div>
+        ) : channels.length > 0 ? (
           <div className="grid grid-cols-6 gap-6">
-            {filteredMovies.map((movie, index) => (
-              <MovieCard
-                key={movie.id}
-                title={movie.title}
-                year={movie.year}
-                posterUrl={movie.posterUrl}
+            {channels.map((channel, index) => (
+              <SeriesCard
+                key={`${channel.url}-${index}`}
+                title={channel.name}
+                posterUrl={channel.tvg_logo}
                 focused={focusedIndex === index}
                 onFocus={() => setFocusedIndex(index)}
-                onClick={() =>
-                  console.log("Clicked movie:", filteredMovies[focusedIndex])
-                }
+                onClick={() => console.log("Clicked series:", channels[focusedIndex])}
               />
             ))}
           </div>
         ) : (
           <div className="text-center text-zinc-500 text-2xl py-20">
-            No movies found
+            No series found
           </div>
         )}
       </div>
