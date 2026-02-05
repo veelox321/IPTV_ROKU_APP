@@ -1,3 +1,4 @@
+from __future__ import annotations
 """TV-style Streamlit frontend for the IPTV FastAPI backend.
 
 Manual validation steps:
@@ -9,7 +10,21 @@ Manual validation steps:
 6) UI shows categories, grid, and stats chart
 """
 
-from __future__ import annotations
+import sys
+import subprocess
+
+print("PYTHON EXECUTABLE:", sys.executable)
+print("PYTHON VERSION:", sys.version)
+
+try:
+    import matplotlib
+    print("MATPLOTLIB OK:", matplotlib.__version__)
+except Exception as e:
+    print("MATPLOTLIB ERROR:", e)
+
+subprocess.run([sys.executable, "-m", "pip", "list"])
+
+
 
 import html
 import json

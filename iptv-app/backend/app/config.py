@@ -4,7 +4,9 @@ from functools import lru_cache
 import logging
 from pathlib import Path
 
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
 
 
 class Settings(BaseSettings):
