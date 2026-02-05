@@ -34,6 +34,7 @@ router = APIRouter()
 # AUTH
 # ---------------------------------------------------------------------------
 
+
 @router.post("/login")
 def login(credentials: CredentialsIn) -> dict[str, str]:
     """Store IPTV credentials in memory."""
@@ -46,6 +47,7 @@ def login(credentials: CredentialsIn) -> dict[str, str]:
 # CHANNELS
 # ---------------------------------------------------------------------------
 
+
 @router.get("/channels")
 def get_channels(
     page: int = Query(1, ge=1, description="Page number (1-indexed)."),
@@ -57,6 +59,7 @@ def get_channels(
     ),
     search: str | None = Query(None, min_length=1),
     category: str | None = Query(None, min_length=1),
+    group: str | None = Query(None, min_length=1),
 ) -> ChannelListResponse:
     """
     Return paginated channels from cache.
@@ -76,11 +79,14 @@ def get_channels(
 
     search_l = search.lower() if search else None
     category_l = category.lower() if category else None
+    group_l = group.lower() if group else None
 
     def matches(channel: dict) -> bool:
         if search_l and search_l not in channel.get("name", "").lower():
             return False
         if category_l and channel.get("category", "other").lower() != category_l:
+            return False
+        if group_l and group_l not in channel.get("group", "").lower():
             return False
         return True
 
@@ -109,6 +115,7 @@ def get_channels(
 # ---------------------------------------------------------------------------
 # REFRESH (BACKGROUND)
 # ---------------------------------------------------------------------------
+
 
 def _refresh_job(credentials: CredentialsIn) -> None:
     """Background task: download, parse, and cache IPTV channels."""
@@ -155,6 +162,7 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
 # STATUS / STATS
 # ---------------------------------------------------------------------------
 
+
 @router.get("/status")
 def status() -> StatusResponse:
     """Return backend and cache status."""
@@ -178,34 +186,47 @@ def channel_stats() -> StatsResponse:
     if not cached:
         raise HTTPException(404, "No cache available")
 
-    stats = cached.get("stats")
-    if not stats:
-        raise HTTPException(500, "Statistics not available in cache")
+    stats = cache.get_stats(cached)
 
     return StatsResponse(
-        total=cached.get("channel_count", 0),
-        **stats,
+        total=stats.get("total", 0),
+        tv=stats.get("tv", 0),
+        movies=stats.get("movies", 0),
+        series=stats.get("series", 0),
+        other=stats.get("other", 0),
     )
 
 
-
 @router.get("/groups")
-def list_categories() -> dict[str, list[str]]:
-    """Return available channel categories (O(1))."""
+def list_categories() -> dict[str, list[dict[str, int]] | list[str]]:
+    """Return available channel categories and group-title counts (O(1))."""
     cached = cache.load_cache()
     if not cached:
         raise HTTPException(404, "No cache available")
 
     categories = cached.get("categories")
-    if categories is None:
-        raise HTTPException(500, "Categories not available in cache")
+    group_counts = cached.get("group_counts")
+    if categories is None or group_counts is None:
+        raise HTTPException(500, "Group metadata not available in cache")
 
-    return {"categories": categories}
+    groups = [
+        {"name": name, "count": count}
+        for name, count in sorted(
+            group_counts.items(),
+            key=lambda item: (-item[1], item[0].lower()),
+        )
+    ]
+
+    return {
+        "categories": categories,
+        "groups": groups[:200],
+    }
 
 
 # ---------------------------------------------------------------------------
 # HEALTH
 # ---------------------------------------------------------------------------
+
 
 @router.get("/health")
 def health_check() -> JSONResponse:

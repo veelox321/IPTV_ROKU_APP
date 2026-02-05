@@ -25,9 +25,44 @@ HEADERS = {
 }
 
 DEFAULT_FILTER_KEYWORDS = ["ufc", "paramount"]
-EXTINF_RE = re.compile(r"#EXTINF:-?\d*(?:\s+.*)?,(.*)$")
-GROUP_RE = re.compile(r'group-title="([^"]+)"')
-TVG_NAME_RE = re.compile(r'tvg-name="([^"]+)"')
+ATTR_RE = re.compile(r'([A-Za-z0-9_-]+)="([^"]*)"')
+
+CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    (
+        "movies",
+        (
+            "movie",
+            "movies",
+            "vod",
+            "film",
+            "cinema",
+        ),
+    ),
+    (
+        "series",
+        (
+            "series",
+            "shows",
+            "show",
+            "season",
+            "episode",
+        ),
+    ),
+    (
+        "tv",
+        (
+            "live",
+            "tv",
+            "sports",
+            "sport",
+            "news",
+            "kids",
+            "music",
+            "entertainment",
+        ),
+    ),
+]
+
 
 
 def _normalize_host(host: str) -> str:
@@ -90,35 +125,50 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
     return playlist_text
 
 
-def _extract_name(line: str) -> str:
-    """Extract a channel display name from an EXTINF line."""
 
-    name_match = EXTINF_RE.search(line)
-    if name_match and name_match.group(1).strip():
-        return name_match.group(1).strip()
-    tvg_match = TVG_NAME_RE.search(line)
-    if tvg_match and tvg_match.group(1).strip():
-        return tvg_match.group(1).strip()
+def _safe_text(value: str | None, fallback: str) -> str:
+    cleaned = (value or "").strip()
+    return cleaned if cleaned else fallback
+
+
+def _parse_extinf_line(line: str) -> tuple[dict[str, str], str]:
+    """Parse an EXTINF line into attributes and display name."""
+
+    header, _, name_part = line.partition(",")
+    attrs = {match.group(1): match.group(2) for match in ATTR_RE.finditer(header)}
+
+    name = _safe_text(name_part, "")
+    if not name:
+        name = _safe_text(attrs.get("tvg-name"), "")
+    if not name:
+        name = _safe_text(attrs.get("tvg-id"), "Unknown")
+    return attrs, name
+
+
+
+def _derive_group(attrs: dict[str, str]) -> str:
+    """Derive a raw group-title string from EXTINF attributes."""
+
+    for key in ("group-title", "group", "category", "type", "tvg-group"):
+        value = attrs.get(key)
+        if value and value.strip():
+            return value.strip()
     return "Unknown"
 
-
-def _extract_group(line: str) -> str:
-    """Extract the group-title value from an EXTINF line."""
-
-    group_match = GROUP_RE.search(line)
-    if group_match and group_match.group(1).strip():
-        return group_match.group(1).strip()
-    return "Unknown"
 
 
 def normalize_category(group: str) -> str:
     """Normalize a channel category based on its group title."""
 
-    normalized = group.lower()
-    for category, keywords in CATEGORY_MAP.items():
+    normalized = (group or "").strip().lower()
+    if not normalized:
+        return "other"
+
+    for category, keywords in CATEGORY_KEYWORDS:
         if any(keyword in normalized for keyword in keywords):
             return category
     return "other"
+
 
 
 def parse_m3u(playlist_text: str) -> list[dict]:
@@ -133,20 +183,41 @@ def parse_m3u(playlist_text: str) -> list[dict]:
             continue
 
         if line.startswith("#EXTINF"):
-            name = _extract_name(line)
-            group = _extract_group(line)
+            try:
+                attrs, display_name = _parse_extinf_line(line)
+            except Exception:
+                LOGGER.debug("Skipping malformed EXTINF line: %s", line)
+                pending = None
+                continue
+
+            group = _derive_group(attrs)
             pending = {
-                "name": name,
+                "name": _safe_text(display_name, "Unknown"),
                 "group": group,
                 "category": normalize_category(group),
             }
+
+            tvg_id = _safe_text(attrs.get("tvg-id"), "")
+            tvg_name = _safe_text(attrs.get("tvg-name"), "")
+            tvg_logo = _safe_text(attrs.get("tvg-logo"), "")
+            tvg_chno = _safe_text(attrs.get("tvg-chno"), "")
+
+            if tvg_id:
+                pending["tvg_id"] = tvg_id
+            if tvg_name:
+                pending["tvg_name"] = tvg_name
+            if tvg_logo:
+                pending["tvg_logo"] = tvg_logo
+            if tvg_chno:
+                pending["tvg_chno"] = tvg_chno
             continue
 
         if line.startswith("#"):
             continue
 
+        url = _safe_text(line, "about:blank")
         if pending:
-            pending["url"] = line
+            pending["url"] = url
             channels.append(pending)
             pending = None
         else:
@@ -155,12 +226,12 @@ def parse_m3u(playlist_text: str) -> list[dict]:
                     "name": "Unknown",
                     "group": "Unknown",
                     "category": "other",
-                    "url": line,
+                    "url": url,
                 }
             )
 
     if pending:
-        pending["url"] = ""
+        pending["url"] = _safe_text(pending.get("url"), "about:blank")
         channels.append(pending)
 
     return channels
@@ -183,11 +254,7 @@ def filter_channels(
     LOGGER.debug("Filtered channels count=%s keywords=%s", len(filtered), lowered)
     return filtered
 
-CATEGORY_MAP = {
-    "tv": ["tv", "live"],
-    "movies": ["movie", "vod", "film"],
-    "series": ["series", "show"],
-}
+
 
 def count_categories(channels: list[dict]) -> dict[str, int]:
     """Count channels by normalized category."""
