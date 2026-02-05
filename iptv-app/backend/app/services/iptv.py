@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import requests
 import urllib3
 
+from app.config import get_settings
 from app.models import CredentialsIn
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -25,6 +26,8 @@ HEADERS = {
 
 DEFAULT_FILTER_KEYWORDS = ["ufc", "paramount"]
 EXTINF_RE = re.compile(r"#EXTINF:-?\d*(?:\s+.*)?,(.*)$")
+GROUP_RE = re.compile(r'group-title="([^"]+)"')
+TVG_NAME_RE = re.compile(r'tvg-name="([^"]+)"')
 
 
 def _normalize_host(host: str) -> str:
@@ -37,14 +40,19 @@ def _normalize_host(host: str) -> str:
 
 
 def build_m3u_url(credentials: CredentialsIn) -> str:
+    """Build the M3U playlist URL from credentials."""
+
     host = _normalize_host(credentials.host)
     return f"http://{host}/playlist/{credentials.username}/{credentials.password}/m3u"
 
 
 def fetch_m3u(credentials: CredentialsIn) -> str:
+    """Fetch the M3U playlist for provided credentials."""
+
     if not credentials.host or not credentials.username or not credentials.password:
         raise RuntimeError("Incomplete IPTV credentials")
 
+    settings = get_settings()
     url = build_m3u_url(credentials)
     LOGGER.debug("M3U download start: url=%s", url)
     try:
@@ -52,7 +60,7 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
             url,
             headers=HEADERS,
             timeout=20,
-            verify=False,
+            verify=settings.verify_ssl,
             allow_redirects=True,
         )
     except requests.exceptions.SSLError as exc:
@@ -81,24 +89,56 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
         raise RuntimeError("Empty M3U playlist received from IPTV provider")
     return playlist_text
 
-GROUP_RE = re.compile(r'group-title="([^"]+)"')
+
+def _extract_name(line: str) -> str:
+    """Extract a channel display name from an EXTINF line."""
+
+    name_match = EXTINF_RE.search(line)
+    if name_match and name_match.group(1).strip():
+        return name_match.group(1).strip()
+    tvg_match = TVG_NAME_RE.search(line)
+    if tvg_match and tvg_match.group(1).strip():
+        return tvg_match.group(1).strip()
+    return "Unknown"
+
+
+def _extract_group(line: str) -> str:
+    """Extract the group-title value from an EXTINF line."""
+
+    group_match = GROUP_RE.search(line)
+    if group_match and group_match.group(1).strip():
+        return group_match.group(1).strip()
+    return "Unknown"
+
+
+def normalize_category(group: str) -> str:
+    """Normalize a channel category based on its group title."""
+
+    normalized = group.lower()
+    for category, keywords in CATEGORY_MAP.items():
+        if any(keyword in normalized for keyword in keywords):
+            return category
+    return "other"
+
 
 def parse_m3u(playlist_text: str) -> list[dict]:
-    channels = []
-    pending = None
+    """Parse the M3U playlist into a list of normalized channel dictionaries."""
 
-    for line in playlist_text.splitlines():
-        line = line.strip()
+    channels: list[dict[str, Any]] = []
+    pending: dict[str, Any] | None = None
+
+    for raw_line in playlist_text.splitlines():
+        line = raw_line.strip()
         if not line:
             continue
 
         if line.startswith("#EXTINF"):
-            name_match = EXTINF_RE.search(line)
-            group_match = GROUP_RE.search(line)
-
+            name = _extract_name(line)
+            group = _extract_group(line)
             pending = {
-                "name": name_match.group(1).strip() if name_match else "Unknown",
-                "group": group_match.group(1).lower() if group_match else "unknown",
+                "name": name,
+                "group": group,
+                "category": normalize_category(group),
             }
             continue
 
@@ -109,6 +149,19 @@ def parse_m3u(playlist_text: str) -> list[dict]:
             pending["url"] = line
             channels.append(pending)
             pending = None
+        else:
+            channels.append(
+                {
+                    "name": "Unknown",
+                    "group": "Unknown",
+                    "category": "other",
+                    "url": line,
+                }
+            )
+
+    if pending:
+        pending["url"] = ""
+        channels.append(pending)
 
     return channels
 
@@ -117,6 +170,8 @@ def parse_m3u(playlist_text: str) -> list[dict]:
 def filter_channels(
     channels: Iterable[dict[str, Any]], keywords: Iterable[str] | None = None
 ) -> list[dict[str, Any]]:
+    """Filter channels by keyword match in their names."""
+
     if not keywords:
         return list(channels)
     lowered = [keyword.lower() for keyword in keywords]
@@ -135,17 +190,18 @@ CATEGORY_MAP = {
 }
 
 def count_categories(channels: list[dict]) -> dict[str, int]:
+    """Count channels by normalized category."""
+
     counts = {"tv": 0, "movies": 0, "series": 0, "other": 0}
 
     for ch in channels:
-        group = ch.get("group", "")
-        matched = False
-        for cat, keys in CATEGORY_MAP.items():
-            if any(k in group for k in keys):
-                counts[cat] += 1
-                matched = True
-                break
-        if not matched:
-            counts["other"] += 1
+        category = ch.get("category")
+        if category in counts:
+            counts[category] += 1
+            continue
+
+        group = str(ch.get("group", "")).lower()
+        normalized = normalize_category(group)
+        counts[normalized] += 1
 
     return counts
