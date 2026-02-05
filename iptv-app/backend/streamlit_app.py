@@ -316,7 +316,7 @@ if st.session_state.refresh_polling:
     if status_payload and status_payload.get("refreshing"):
         st.info("Refresh in progress…")
         time.sleep(1)
-        st.experimental_rerun()
+        st.rerun()
     else:
         st.session_state.refresh_polling = False
         fetch_status.clear()
@@ -338,7 +338,7 @@ if st.session_state.search_pending:
     elapsed = time.time() - st.session_state.search_changed_at
     if elapsed < 0.4:
         time.sleep(0.4 - elapsed)
-        st.experimental_rerun()
+        st.rerun()
     st.session_state.search_pending = False
     st.session_state.last_filters = {}
 
