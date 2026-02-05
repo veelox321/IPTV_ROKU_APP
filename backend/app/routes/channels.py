@@ -71,18 +71,34 @@ def get_channels(
     )
     cached = cache.load_cache()
     if not cached:
-        raise HTTPException(404, "No cached channels available. Run /refresh first.")
+        LOGGER.info("Channels requested but cache is missing")
+        return ChannelListResponse(
+            channels=[],
+            cached=False,
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
 
     channels: Iterable[dict] = cached.get("channels", [])
 
     search_l = search.lower() if search else None
     category_l = category.lower() if category else None
     group_l = group.lower() if group else None
+    if category_l and category_l not in iptv.ALLOWED_CATEGORIES:
+        LOGGER.info("Invalid category filter provided: %s", category)
+        return ChannelListResponse(
+            channels=[],
+            cached=True,
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
 
     def matches(ch: dict) -> bool:
         if search_l and search_l not in ch.get("name", "").lower():
             return False
-        if category_l and ch.get("category", "other") != category_l:
+        if category_l and ch.get("category", "other").lower() != category_l:
             return False
         if group_l and group_l not in ch.get("group", "").lower():
             return False
@@ -138,7 +154,8 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Trigger a non-blocking refresh of the channel cache."""
 
     if not auth.has_credentials():
-        raise HTTPException(400, "Credentials required")
+        LOGGER.info("Refresh requested without login")
+        raise HTTPException(409, "not logged in")
 
     if not cache.try_set_refreshing():
         return {"status": "already_running"}
@@ -146,7 +163,8 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
     credentials = auth.get_credentials()
     if credentials is None:
         cache.set_refreshing(False)
-        raise HTTPException(400, "Credentials missing")
+        LOGGER.info("Refresh requested but credentials missing in memory")
+        raise HTTPException(409, "not logged in")
 
     background_tasks.add_task(_refresh_job, credentials)
     return {"status": "started"}
@@ -176,10 +194,9 @@ def stats() -> StatsResponse:
     """Return aggregated channel statistics."""
 
     cached = cache.load_cache()
-    if not cached:
-        raise HTTPException(404, "No cache available")
-
     stats = cache.get_stats(cached)
+    if not cached:
+        LOGGER.info("Stats requested but cache is missing")
     LOGGER.info("Computed stats: %s", stats)
     counts = stats
     return StatsResponse(
@@ -197,7 +214,8 @@ def groups() -> dict:
 
     cached = cache.load_cache()
     if not cached:
-        raise HTTPException(404, "No cache available")
+        LOGGER.info("Groups requested but cache is missing")
+        return {"categories": [], "groups": {}}
 
     return {
         "categories": cached.get("categories", []),

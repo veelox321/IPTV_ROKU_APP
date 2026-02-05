@@ -57,7 +57,7 @@ def _normalize_channel(channel: dict[str, Any]) -> dict[str, Any]:
     group = str(channel.get("group") or "Unknown").strip() or "Unknown"
     channel["group"] = group
     raw_category = str(channel.get("category") or "").strip()
-    channel["category"] = iptv.normalize_category(raw_category or group)
+    channel["category"] = iptv.coerce_category(raw_category, group)
     return channel
 
 
@@ -72,9 +72,7 @@ def _compute_stats(channels: Iterable[dict[str, Any]]) -> dict[str, int]:
 
     for ch in channels:
         raw_category = str(ch.get("category") or "").strip()
-        normalized = iptv.normalize_category(
-            raw_category or str(ch.get("group") or "")
-        )
+        normalized = iptv.coerce_category(raw_category, str(ch.get("group") or ""))
         stats[normalized if normalized in stats else "other"] += 1
 
     stats["total"] = sum(stats.values())
