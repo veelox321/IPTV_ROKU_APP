@@ -1,4 +1,6 @@
+import React from "react";
 import { createBrowserRouter } from "react-router";
+import { SessionShell } from "./components/session-shell";
 import { HomeScreen } from "./screens/home-screen";
 import { LiveScreen } from "./screens/live-screen";
 import { MoviesScreen } from "./screens/movies-screen";
@@ -8,22 +10,32 @@ import { OthersScreen } from "./screens/others-screen";
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: HomeScreen,
+    element: React.createElement(SessionShell, {
+      Screen: HomeScreen,
+    }),
   },
   {
     path: "/live",
-    Component: LiveScreen,
+    element: React.createElement(SessionShell, {
+      Screen: LiveScreen,
+    }),
   },
   {
     path: "/movies",
-    Component: MoviesScreen,
+    element: React.createElement(SessionShell, {
+      Screen: MoviesScreen,
+    }),
   },
   {
     path: "/series",
-    Component: SeriesScreen,
+    element: React.createElement(SessionShell, {
+      Screen: SeriesScreen,
+    }),
   },
   {
     path: "/others",
-    Component: OthersScreen,
+    element: React.createElement(SessionShell, {
+      Screen: OthersScreen,
+    }),
   },
 ]);
