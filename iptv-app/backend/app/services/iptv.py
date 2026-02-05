@@ -1,7 +1,7 @@
 """
 IPTV service
 ------------
-- Fetch channels via Xtream Codes API
+- Fetch channels via Xtream Codes M3U API
 - Handle self-signed SSL
 - Handle unstable IPTV servers
 - Use realistic IPTV headers
@@ -9,8 +9,10 @@ IPTV service
 - NEVER crash FastAPI (raise controlled errors)
 """
 
-from typing import Any
 import logging
+import re
+from typing import Any, Iterable
+
 import requests
 import urllib3
 from requests.adapters import HTTPAdapter
@@ -66,9 +68,77 @@ _SESSION = _build_session()
 
 LOGGER = logging.getLogger(__name__)
 
+_EXTINF_RE = re.compile(r'#EXTINF:-?\d+\s*(.*)', re.IGNORECASE)
+_GROUP_RE = re.compile(r'group-title="([^"]+)"', re.IGNORECASE)
+
+
+def _normalize_category(group: str, name: str) -> str:
+    """Map group/name hints into a normalized category."""
+
+    haystack = f"{group} {name}".lower()
+    if any(keyword in haystack for keyword in ("movie", "cinema", "film", "vod")):
+        return "movies"
+    if any(keyword in haystack for keyword in ("series", "tv show", "shows")):
+        return "series"
+    if any(keyword in haystack for keyword in ("live", "tv", "news", "sport")):
+        return "tv"
+    return "other"
+
+
+def _parse_m3u(lines: Iterable[str]) -> list[dict[str, Any]]:
+    """Parse M3U playlist lines into normalized channel dictionaries."""
+
+    channels: list[dict[str, Any]] = []
+    current_meta: dict[str, str] = {}
+    line_index = 0
+
+    for raw_line in lines:
+        line_index += 1
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#EXTINF"):
+            match = _EXTINF_RE.match(line)
+            metadata = match.group(1) if match else ""
+            group_match = _GROUP_RE.search(metadata)
+            group = group_match.group(1).strip() if group_match else "Other"
+            name = metadata.split(",")[-1].strip() if "," in metadata else ""
+            if not name:
+                name = f"Unknown Channel {line_index}"
+                LOGGER.debug("Missing channel name at line %s.", line_index)
+            current_meta = {"name": name, "group": group}
+            continue
+        if line.startswith("#"):
+            continue
+        url = line
+        if not current_meta:
+            name = f"Unknown Channel {line_index}"
+            group = "Other"
+            LOGGER.warning(
+                "Stream URL without EXTINF metadata at line %s; using defaults.",
+                line_index,
+            )
+        else:
+            name = current_meta["name"]
+            group = current_meta["group"]
+        channels.append(
+            {
+                "name": name,
+                "group": group,
+                "category": _normalize_category(group, name),
+                "url": url,
+            }
+        )
+        current_meta = {}
+
+    if current_meta:
+        LOGGER.warning("Dangling EXTINF metadata without URL at end of file.")
+    return channels
+
+
 def fetch_channels(credentials: CredentialsIn, verify_ssl: bool) -> list[dict[str, Any]]:
     """
-    Fetch live channels from IPTV provider using Xtream Codes API.
+    Fetch live channels from IPTV provider using Xtream Codes M3U API.
 
     Args:
         credentials: IPTV credential model
@@ -88,23 +158,22 @@ def fetch_channels(credentials: CredentialsIn, verify_ssl: bool) -> list[dict[st
     if not host or not username or not password:
         raise RuntimeError("Incomplete IPTV credentials")
 
-    endpoint = f"{host.rstrip('/')}/player_api.php"
-
-    action = "get_live_categories"
     params = {
         "username": username,
         "password": password,
-        "action": action,
+        "type": "m3u_plus",
+        "output": "ts",
     }
+    endpoint = f"{host.rstrip('/')}/get.php"
 
     try:
-        LOGGER.debug("IPTV fetch start: endpoint=%s action=%s", endpoint, action)
+        LOGGER.debug("IPTV fetch start: endpoint=%s", endpoint)
         response = _SESSION.get(
             endpoint,
             params=params,
             headers=HEADERS,
             timeout=30,
-            verify=verify_ssl,   # False
+            verify=verify_ssl,
             allow_redirects=True,
         )
         LOGGER.debug("IPTV response status: %s", response.status_code)
@@ -129,45 +198,11 @@ def fetch_channels(credentials: CredentialsIn, verify_ssl: bool) -> list[dict[st
             f"IPTV server returned HTTP {response.status_code}"
         )
 
-    try:
-        raw_channels = response.json()
-    except ValueError:
-        raise RuntimeError("Invalid JSON received from IPTV server")
+    playlist_text = response.text
+    if not playlist_text:
+        raise RuntimeError("Empty playlist returned by IPTV provider")
 
-    if not isinstance(raw_channels, list):
-        raise RuntimeError("Unexpected IPTV response format")
-
-    # --------------------------------------------------
-    # Normalize channels
-    # --------------------------------------------------
-    channels: list[dict[str, Any]] = []
-
-    for ch in raw_channels:
-        try:
-            stream_id = ch.get("stream_id")
-            name = ch.get("name", "").strip()
-            group = ch.get("category_name", "Unknown")
-
-            if not stream_id or not name:
-                continue
-
-            stream_url = (
-                f"{host.rstrip('/')}/live/"
-                f"{username}/{password}/{stream_id}.ts"
-            )
-
-            channels.append(
-                {
-                    "id": stream_id,
-                    "name": name,
-                    "group": group,
-                    "stream_url": stream_url,
-                }
-            )
-
-        except Exception:
-            # Never fail on single malformed channel
-            continue
+    channels = _parse_m3u(playlist_text.splitlines())
 
     if not channels:
         raise RuntimeError("No channels returned by IPTV provider")

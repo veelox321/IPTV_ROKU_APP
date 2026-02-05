@@ -14,10 +14,10 @@ class CredentialsIn(BaseModel):
 class Channel(BaseModel):
     """Normalized channel data returned to clients."""
 
-    id: str
     name: str
     group: str
-    stream_url: str
+    category: str
+    url: str
 
 
 class ChannelListResponse(BaseModel):
