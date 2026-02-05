@@ -61,6 +61,14 @@ def get_channels(
     Streaming-safe: no full list slicing.
     """
 
+    LOGGER.info(
+        "Channels request page=%s page_size=%s search=%s category=%s group=%s",
+        page,
+        page_size,
+        search,
+        category,
+        group,
+    )
     cached = cache.load_cache()
     if not cached:
         raise HTTPException(404, "No cached channels available. Run /refresh first.")
@@ -171,8 +179,9 @@ def stats() -> StatsResponse:
     if not cached:
         raise HTTPException(404, "No cache available")
 
-    counts = cache.get_stats(cached)
-
+    stats = cache.get_stats(cached)
+    LOGGER.info("Computed stats: %s", stats)
+    counts = stats
     return StatsResponse(
         total=counts["total"],
         tv=counts["tv"],

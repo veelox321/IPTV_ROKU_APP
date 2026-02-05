@@ -25,16 +25,13 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
     configure_logging(settings.debug)
-
-    LOGGER.info("Application startup")
-
-    try:
-        creds = auth.load_env_credentials()
-        if creds is not None:
-            LOGGER.info("Environment credentials loaded")
-    except Exception:
-        LOGGER.exception("Failed to load environment credentials")
-
+    LOGGER.debug("Application startup.")
+    for route in app.router.routes:
+        methods = getattr(route, "methods", None)
+        methods_str = ",".join(sorted(methods)) if methods else "N/A"
+        LOGGER.info("Registered route: %s %s", methods_str, route.path)
+    if auth.load_env_credentials() is not None:
+        LOGGER.debug("Environment credentials detected and available.")
     yield
 
     LOGGER.info("Application shutdown")
@@ -65,6 +62,21 @@ app.add_middleware(
 # -----------------------------------------------------------------------------
 # Routers
 # -----------------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(channels_router)
 
