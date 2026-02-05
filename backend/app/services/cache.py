@@ -42,14 +42,14 @@ _LOAD_LOG_LIMIT = 5
 _CACHE_SCHEMA_VERSION = 1
 _CREATED_BY = "iptv-backend"
 
-_CACHE_PATH = get_cache_path().resolve()
-LOGGER.info("Cache path configured: %s", _CACHE_PATH)
+
 
 def get_cache_path() -> Path:
     """Return the cache file path (outside the repo by default)."""
     settings = get_settings()
     return settings.cache_dir / "channels.json"
-
+_CACHE_PATH = get_cache_path().resolve()
+LOGGER.info("Cache path configured: %s", _CACHE_PATH)
 
 # ---------------------------------------------------------------------------
 # INTERNAL HELPERS

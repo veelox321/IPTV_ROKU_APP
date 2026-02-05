@@ -304,7 +304,8 @@ def parse_m3u(playlist_text: str) -> list[dict]:
                 "group": group,
                 "category": normalize_category(group),
             }
-
+            if len(channels) < 10:
+                LOGGER.info("[DEBUG] group=%s attrs=%s name=%s", group, attrs, display_name)
             tvg_id = _safe_text(attrs.get("tvg-id"), "")
             tvg_name = _safe_text(attrs.get("tvg-name"), "")
             tvg_logo = _safe_text(attrs.get("tvg-logo"), "")

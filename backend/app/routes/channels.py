@@ -165,7 +165,7 @@ def _refresh_job(credentials: CredentialsIn) -> None:
             fetch_elapsed,
             preview,
         )
-
+        LOGGER.info("First 20 lines of playlist:\n%s", "\n".join(playlist.split("\n")[:20]))
         parse_started = time.monotonic()
         try:
             channels = iptv.parse_m3u(playlist)
