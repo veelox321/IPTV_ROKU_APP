@@ -11,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import get_settings
 from backend.app.routes.channels import router as channels_router
-from backend.app.services import auth
 from backend.app.utils.logging import configure_logging
 
 LOGGER = logging.getLogger(__name__)
@@ -19,9 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Configure logging and load credentials from environment if provided.
-    """
+    """Configure logging and log registered routes."""
 
     settings = get_settings()
     configure_logging(settings.debug)
@@ -30,8 +27,6 @@ async def lifespan(app: FastAPI):
         methods = getattr(route, "methods", None)
         methods_str = ",".join(sorted(methods)) if methods else "N/A"
         LOGGER.info("Registered route: %s %s", methods_str, route.path)
-    if auth.load_env_credentials() is not None:
-        LOGGER.debug("Environment credentials detected and available.")
     yield
 
     LOGGER.info("Application shutdown")

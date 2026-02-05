@@ -3,26 +3,11 @@
 from typing import Optional
 import logging
 
-from backend.app.config import get_settings
 from backend.app.models import CredentialsIn
 
 LOGGER = logging.getLogger(__name__)
 
 _credentials: Optional[CredentialsIn] = None
-
-
-def load_env_credentials() -> Optional[CredentialsIn]:
-    """Load credentials from environment if fully configured."""
-
-    settings = get_settings()
-    if not settings.iptv_host or not settings.iptv_username or not settings.iptv_password:
-        return None
-
-    return CredentialsIn(
-        host=settings.iptv_host,
-        username=settings.iptv_username,
-        password=settings.iptv_password,
-    )
 
 
 def set_credentials(credentials: CredentialsIn) -> None:
@@ -37,19 +22,8 @@ def set_credentials(credentials: CredentialsIn) -> None:
 
 
 def get_credentials() -> Optional[CredentialsIn]:
-    """Return credentials if they have been set or loaded from env."""
+    """Return credentials if they have been set."""
 
-    global _credentials
-    if _credentials is not None:
-        return _credentials
-
-    env_credentials = load_env_credentials()
-    if env_credentials is not None:
-        _credentials = env_credentials
-        LOGGER.debug(
-            "Loaded credentials from environment fallback for host=%s.",
-            env_credentials.host,
-        )
     return _credentials
 
 

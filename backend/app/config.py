@@ -1,10 +1,15 @@
 """Application configuration loaded from environment variables."""
 
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_CACHE_DIR = Path(
+    os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"),
+) / "iptv_roku_app"
 
 
 class Settings(BaseSettings):
@@ -16,9 +21,7 @@ class Settings(BaseSettings):
     )
 
     debug: bool = Field(default=False, validation_alias="DEBUG")
-    iptv_host: str | None = Field(default=None, validation_alias="IPTV_HOST")
-    iptv_username: str | None = Field(default=None, validation_alias="IPTV_USERNAME")
-    iptv_password: str | None = Field(default=None, validation_alias="IPTV_PASSWORD")
+    cache_dir: Path = Field(default=DEFAULT_CACHE_DIR, validation_alias="CACHE_DIR")
     cache_ttl_seconds: int = Field(default=21600, validation_alias="CACHE_TTL_SECONDS")
     verify_ssl: bool = Field(default=True, validation_alias="VERIFY_SSL")
 

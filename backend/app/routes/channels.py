@@ -158,7 +158,8 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
         raise HTTPException(409, "not logged in")
 
     if not cache.try_set_refreshing():
-        return {"status": "already_running"}
+        LOGGER.info("Refresh requested while another refresh is in progress")
+        raise HTTPException(409, "already refreshing")
 
     credentials = auth.get_credentials()
     if credentials is None:
