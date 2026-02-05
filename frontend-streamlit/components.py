@@ -8,6 +8,19 @@ from typing import Any
 import requests
 
 DEFAULT_API_URL = "http://localhost:8000"
+REQUEST_TIMEOUT_SECONDS = 30
+
+
+def _extract_error(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            detail = payload.get("detail")
+            if detail:
+                return str(detail)
+        return json.dumps(payload)
+    except json.JSONDecodeError:
+        return response.text or f"HTTP {response.status_code}"
 
 
 def request_json(
@@ -24,9 +37,10 @@ def request_json(
             url,
             json=payload,
             params=params,
-            timeout=30,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
-        response.raise_for_status()
+        if not response.ok:
+            return None, _extract_error(response)
         return response.json(), None
     except requests.RequestException as exc:
         return None, f"Network error: {exc}"

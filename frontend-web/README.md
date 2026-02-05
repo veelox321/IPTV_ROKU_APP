@@ -1,6 +1,6 @@
 # IPTV Web Frontend
 
-This is the main user-facing UI (Vite + React + Tailwind + Radix/MUI). It is designed for TV-style navigation and consumes the FastAPI backend.
+A platform-agnostic React UI that follows the backend status contract and supports login → refresh → ready.
 
 ## Requirements
 
@@ -22,7 +22,22 @@ Create a `.env` file in `frontend-web/` (optional):
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
-## Notes
+## Folder Structure
 
-- The UI fetches channel data and stats through `src/services/api.ts`.
-- Navigation is optimized for remote control input (arrow keys + enter).
+```
+src/
+  api/iptv.ts
+  state/session.ts
+  components/
+    Dashboard.tsx
+    LoadingScreen.tsx
+    LoginScreen.tsx
+  pages/
+    AppShell.tsx
+```
+
+## Behavior Notes
+
+- `/status` drives UI state.
+- `/refresh` is only called if `logged_in=true`.
+- Empty channel lists are valid until the cache is populated.

@@ -24,6 +24,10 @@ from backend.app.models import (
     StatusResponse,
 )
 from backend.app.services import auth, cache, iptv
+from backend.app.utils.constants import (
+    ALREADY_REFRESHING_ERROR,
+    NOT_LOGGED_IN_ERROR,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -155,17 +159,17 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
 
     if not auth.has_credentials():
         LOGGER.info("Refresh requested without login")
-        raise HTTPException(409, "not logged in")
+        raise HTTPException(409, NOT_LOGGED_IN_ERROR)
 
     if not cache.try_set_refreshing():
         LOGGER.info("Refresh requested while another refresh is in progress")
-        raise HTTPException(409, "already refreshing")
+        raise HTTPException(409, ALREADY_REFRESHING_ERROR)
 
     credentials = auth.get_credentials()
     if credentials is None:
         cache.set_refreshing(False)
         LOGGER.info("Refresh requested but credentials missing in memory")
-        raise HTTPException(409, "not logged in")
+        raise HTTPException(409, NOT_LOGGED_IN_ERROR)
 
     background_tasks.add_task(_refresh_job, credentials)
     return {"status": "started"}
