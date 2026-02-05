@@ -6,9 +6,9 @@ import time
 
 from fastapi import FastAPI, Request
 
-from app.config import configure_logging, get_settings
-from app.routes.channels import router as channels_router
-from app.services import auth
+from backend.app.config import configure_logging, get_settings
+from backend.app.routes.channels import router as channels_router
+from backend.app.services import auth
 
 LOGGER = logging.getLogger(__name__)
 

@@ -3,8 +3,8 @@
 from typing import Optional
 import logging
 
-from app.config import get_settings
-from app.models import CredentialsIn
+from backend.app.config import get_settings
+from backend.app.models import CredentialsIn
 
 LOGGER = logging.getLogger(__name__)
 

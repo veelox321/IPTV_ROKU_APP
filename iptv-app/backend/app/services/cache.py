@@ -1,169 +1,231 @@
-"""JSON file cache utilities for channel data."""
+"""
+JSON file cache utilities for IPTV channel data.
+
+Responsibilities:
+- Atomic disk persistence
+- Thread-safe refresh state
+- Cache validation (TTL / host)
+- Precomputed stats & categories (O(1) endpoints)
+"""
 
 from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
-import threading
+from backend.app.services import iptv
 
-_refresh_lock = threading.Lock()
-_refreshing = False
-
-CACHE_PATH = Path(__file__).resolve().parents[2] / "data" / "channels.json"
 LOGGER = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# GLOBAL STATE
+# ---------------------------------------------------------------------------
 
-def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
-    """Write JSON payload to disk atomically."""
+_CACHE_LOCK = threading.Lock()
+_REFRESH_LOCK = threading.Lock()
+_REFRESHING = False
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(".tmp")
-    with temp_path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2)
-    temp_path.replace(path)
-
-
-def _normalize_cache_payload(payload: Any) -> dict[str, Any] | None:
-    """Validate and normalize the cache payload structure."""
-
-    if not isinstance(payload, dict):
-        LOGGER.warning("Channel cache payload is not a dictionary.")
-        return None
-
-    channels = payload.get("channels")
-    if not isinstance(channels, list):
-        LOGGER.warning("Channel cache payload has invalid channels list.")
-        return None
-
-    from app.services import iptv
-
-    for channel in channels:
-        if not isinstance(channel, dict):
-            continue
-        if "category" not in channel:
-            channel["category"] = iptv.normalize_category(str(channel.get("group", "")))
-        if "group" not in channel:
-            channel["group"] = "Unknown"
-        if "name" not in channel:
-            channel["name"] = "Unknown"
-        if "url" not in channel:
-            channel["url"] = ""
-
-    payload.setdefault("channel_count", len(channels))
-    payload.setdefault("timestamp", None)
-    payload.setdefault("host", None)
-    return payload
+CACHE_PATH = Path(__file__).resolve().parents[2] / "data" / "channels.json"
 
 
-def is_refreshing() -> bool:
-    """Check whether a refresh job is currently running."""
-
-    with _refresh_lock:
-        return _refreshing
-
-
-def set_refreshing(value: bool) -> None:
-    """Set the refresh-in-progress flag."""
-
-    global _refreshing
-    with _refresh_lock:
-        _refreshing = value
-
-
-def try_set_refreshing() -> bool:
-    """Atomically set the refreshing flag if not already set."""
-
-    global _refreshing
-    with _refresh_lock:
-        if _refreshing:
-            return False
-        _refreshing = True
-        return True
-
+# ---------------------------------------------------------------------------
+# INTERNAL HELPERS
+# ---------------------------------------------------------------------------
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def load_cache() -> dict[str, Any] | None:
-    """Load cached channel data from disk if available."""
+def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+    """Write JSON payload to disk atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+    tmp.replace(path)
 
+
+def _normalize_channel(channel: dict[str, Any]) -> dict[str, Any]:
+    """Ensure required channel fields exist."""
+    channel.setdefault("name", "Unknown")
+    channel.setdefault("url", "")
+    channel.setdefault("group", "Unknown")
+    channel.setdefault(
+        "category",
+        iptv.normalize_category(str(channel.get("group", ""))),
+    )
+    return channel
+
+
+def _compute_stats(channels: Iterable[dict[str, Any]]) -> dict[str, int]:
+    """Compute IPTV category statistics (ONE TIME)."""
+    stats = {
+        "tv": 0,
+        "movies": 0,
+        "series": 0,
+        "other": 0,
+    }
+
+    for ch in channels:
+        cat = ch.get("category", "other").lower()
+        if "movie" in cat or "vod" in cat or "film" in cat:
+            stats["movies"] += 1
+        elif "series" in cat or "show" in cat:
+            stats["series"] += 1
+        elif "tv" in cat or "live" in cat:
+            stats["tv"] += 1
+        else:
+            stats["other"] += 1
+
+    return stats
+
+
+# ---------------------------------------------------------------------------
+# REFRESH STATE
+# ---------------------------------------------------------------------------
+
+def is_refreshing() -> bool:
+    """Return whether a refresh job is currently running."""
+    with _REFRESH_LOCK:
+        return _REFRESHING
+
+
+def set_refreshing(value: bool) -> None:
+    """Set the refresh-in-progress flag."""
+    global _REFRESHING
+    with _REFRESH_LOCK:
+        _REFRESHING = value
+
+
+def try_set_refreshing() -> bool:
+    """Atomically set the refreshing flag if not already set."""
+    global _REFRESHING
+    with _REFRESH_LOCK:
+        if _REFRESHING:
+            return False
+        _REFRESHING = True
+        return True
+
+
+# ---------------------------------------------------------------------------
+# CACHE IO
+# ---------------------------------------------------------------------------
+
+def load_cache() -> dict[str, Any] | None:
+    """Load cached channel data from disk."""
     if not CACHE_PATH.exists():
-        LOGGER.debug("Channel cache not found at path=%s.", CACHE_PATH)
+        LOGGER.debug("Channel cache not found at %s", CACHE_PATH)
         return None
+
     try:
-        with CACHE_PATH.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-            normalized = _normalize_cache_payload(payload)
-            if normalized is None:
-                LOGGER.warning("Channel cache payload structure invalid.")
-                return None
-            LOGGER.debug("Channel cache loaded from disk.")
-            return normalized
+        with CACHE_PATH.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+
+        channels = payload.get("channels")
+        if not isinstance(channels, list):
+            LOGGER.warning("Invalid cache payload: channels is not a list")
+            return None
+
+        # Normalize channels in-place
+        for ch in channels:
+            if isinstance(ch, dict):
+                _normalize_channel(ch)
+
+        payload.setdefault("channel_count", len(channels))
+        payload.setdefault("stats", _compute_stats(channels))
+        payload.setdefault(
+            "categories",
+            sorted({ch.get("category", "other") for ch in channels}),
+        )
+
+        LOGGER.debug("Channel cache loaded (%d channels)", len(channels))
+        return payload
+
     except json.JSONDecodeError:
-        LOGGER.warning("Channel cache contains invalid JSON.", exc_info=True)
+        LOGGER.exception("Channel cache JSON is invalid")
         return None
     except Exception:
-        LOGGER.exception("Failed to read channel cache from disk.")
+        LOGGER.exception("Failed to load channel cache")
         return None
 
 
 def save_cache(host: str, channels: list[dict[str, Any]]) -> None:
-    """Write channel data to disk with a timestamp."""
+    """Persist channels and precomputed metadata to disk."""
+    normalized = [_normalize_channel(ch) for ch in channels]
 
     payload = {
-        "timestamp": _now().isoformat(),
         "host": host,
-        "channel_count": len(channels),
-        "channels": channels,
+        "timestamp": _now().isoformat(),
+        "channels": normalized,
+        "channel_count": len(normalized),
+        "stats": _compute_stats(normalized),
+        "categories": sorted({ch["category"] for ch in normalized}),
     }
+
     _atomic_write(CACHE_PATH, payload)
-    LOGGER.debug(
-        "Channel cache written to disk for host=%s count=%s.", host, len(channels)
+
+    LOGGER.info(
+        "Channel cache saved host=%s channels=%d categories=%d",
+        host,
+        payload["channel_count"],
+        len(payload["categories"]),
     )
 
 
-def is_cache_valid(cache: dict[str, Any], host: str, ttl_seconds: int) -> bool:
-    """Validate cache timestamp and host."""
+# ---------------------------------------------------------------------------
+# CACHE VALIDATION
+# ---------------------------------------------------------------------------
 
+def is_cache_valid(
+    cache: dict[str, Any],
+    host: str,
+    ttl_seconds: int,
+) -> bool:
+    """Validate cache host and TTL."""
     if cache.get("host") != host:
-        LOGGER.debug("Channel cache invalidated due to host mismatch.")
+        LOGGER.debug("Cache invalid: host mismatch")
         return False
+
     timestamp = cache.get("timestamp")
     if not timestamp:
-        LOGGER.debug("Channel cache invalidated due to missing timestamp.")
+        LOGGER.debug("Cache invalid: missing timestamp")
         return False
+
     try:
         cached_at = datetime.fromisoformat(timestamp)
     except ValueError:
-        LOGGER.debug("Channel cache invalidated due to malformed timestamp.")
+        LOGGER.debug("Cache invalid: malformed timestamp")
         return False
-    expires_at = cached_at + timedelta(seconds=ttl_seconds)
-    is_valid = _now() <= expires_at
-    if not is_valid:
-        LOGGER.debug("Channel cache expired.")
-    return is_valid
+
+    if _now() > cached_at + timedelta(seconds=ttl_seconds):
+        LOGGER.debug("Cache expired")
+        return False
+
+    return True
 
 
-def get_stats(cache_payload: dict[str, Any] | None) -> dict[str, Any]:
-    """Return aggregate stats for cached channels."""
+# ---------------------------------------------------------------------------
+# PUBLIC FAST PATHS
+# ---------------------------------------------------------------------------
 
+def get_stats(cache_payload: dict[str, Any] | None) -> dict[str, int]:
+    """Return cached stats (O(1))."""
     if not cache_payload:
         return {
-            "total": 0,
             "tv": 0,
             "movies": 0,
             "series": 0,
             "other": 0,
+            "total": 0,
         }
 
-    from app.services import iptv
-
-    channels = cache_payload.get("channels", [])
-    counts = iptv.count_categories(channels)
-    counts["total"] = cache_payload.get("channel_count", len(channels))
-    return counts
+    stats = cache_payload.get("stats", {})
+    stats["total"] = cache_payload.get(
+        "channel_count",
+        len(cache_payload.get("channels", [])),
+    )
+    return stats

@@ -1,84 +1,119 @@
-"""API routes for channel operations."""
+"""
+API routes for IPTV channel operations.
+
+Endpoints:
+- POST   /login
+- GET    /channels
+- POST   /refresh
+- GET    /status
+- GET    /stats
+- GET    /groups
+- GET    /health
+"""
 
 import logging
+from typing import Iterable
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app.models import ChannelListResponse, CredentialsIn, StatsResponse, StatusResponse
-from app.services import auth, cache, iptv
+from backend.app.models import (
+    ChannelListResponse,
+    CredentialsIn,
+    StatsResponse,
+    StatusResponse,
+)
+from backend.app.services import auth, cache, iptv
 
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# AUTH
+# ---------------------------------------------------------------------------
+
 @router.post("/login")
 def login(credentials: CredentialsIn) -> dict[str, str]:
     """Store IPTV credentials in memory."""
-
     auth.set_credentials(credentials)
-    LOGGER.debug("Login credentials accepted for host=%s.", credentials.host)
+    LOGGER.debug("Login accepted for host=%s", credentials.host)
     return {"status": "ok"}
 
 
+# ---------------------------------------------------------------------------
+# CHANNELS
+# ---------------------------------------------------------------------------
+
 @router.get("/channels")
 def get_channels(
-    page: int = Query(..., ge=1, description="Page number (1-indexed)."),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)."),
     page_size: int = Query(
-        ...,
+        50,
         ge=1,
         le=100,
-        description="Page size (max 100).",
+        description="Number of items per page (max 100).",
     ),
-    search: str | None = Query(default=None, min_length=1),
-    category: str | None = Query(default=None, min_length=1),
+    search: str | None = Query(None, min_length=1),
+    category: str | None = Query(None, min_length=1),
 ) -> ChannelListResponse:
-    """Return paginated channels from cache."""
+    """
+    Return paginated channels from cache.
+
+    Filtering is applied before pagination.
+    Pagination is streaming-safe (no full list slicing).
+    """
 
     cached = cache.load_cache()
     if not cached:
-        LOGGER.debug("Channel cache miss; no cache file available.")
         raise HTTPException(
             status_code=404,
-            detail="No cached channels available. Run /refresh to fetch fresh data.",
+            detail="No cached channels available. Run /refresh first.",
         )
 
-    channels = cached.get("channels", [])
-    LOGGER.debug("Channel cache hit; returning cached channels.")
+    channels: Iterable[dict] = cached.get("channels", [])
 
-    search_lower = search.lower() if search else None
-    category_lower = category.lower() if category else None
+    search_l = search.lower() if search else None
+    category_l = category.lower() if category else None
 
     def matches(channel: dict) -> bool:
-        if search_lower and search_lower not in str(channel.get("name", "")).lower():
+        if search_l and search_l not in channel.get("name", "").lower():
             return False
-        if category_lower and category_lower != str(channel.get("category", "")).lower():
+        if category_l and channel.get("category", "other").lower() != category_l:
             return False
         return True
 
     offset = (page - 1) * page_size
-    page_items = []
+    items: list[dict] = []
     total = 0
+
     for channel in channels:
         if not matches(channel):
             continue
+
         if offset <= total < offset + page_size:
-            page_items.append(channel)
+            items.append(channel)
+
         total += 1
 
     return ChannelListResponse(
-        channels=page_items,
+        channels=items,
         cached=True,
         total=total,
         page=page,
         page_size=page_size,
     )
 
-def _refresh_job(credentials: CredentialsIn) -> None:
-    """Background refresh job for downloading and parsing channels."""
 
+# ---------------------------------------------------------------------------
+# REFRESH (BACKGROUND)
+# ---------------------------------------------------------------------------
+
+def _refresh_job(credentials: CredentialsIn) -> None:
+    """Background task: download, parse, and cache IPTV channels."""
     LOGGER.info("Background refresh started")
+
     try:
         playlist_text = iptv.fetch_m3u(credentials)
         channels = iptv.parse_m3u(playlist_text)
@@ -96,7 +131,10 @@ def _refresh_job(credentials: CredentialsIn) -> None:
 
 @router.post("/refresh")
 def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
-    """Queue a non-blocking refresh of the channel cache."""
+    """
+    Trigger a non-blocking refresh of the channel cache.
+    Only one refresh can run at a time.
+    """
 
     if not auth.has_credentials():
         raise HTTPException(status_code=400, detail="Credentials required.")
@@ -107,64 +145,69 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
     credentials = auth.get_credentials()
     if credentials is None:
         cache.set_refreshing(False)
-        raise HTTPException(status_code=400, detail="Credentials required.")
-    background_tasks.add_task(_refresh_job, credentials)
+        raise HTTPException(status_code=400, detail="Credentials missing.")
 
+    background_tasks.add_task(_refresh_job, credentials)
     return {"status": "started"}
 
 
+# ---------------------------------------------------------------------------
+# STATUS / STATS
+# ---------------------------------------------------------------------------
 
 @router.get("/status")
 def status() -> StatusResponse:
-    """Return credential and cache status information."""
-
-    logged_in = auth.has_credentials()
+    """Return backend and cache status."""
     cached = cache.load_cache()
-    cache_available = cached is not None
-    last_refresh = cached.get("timestamp") if cached else None
-    channel_count = cached.get("channel_count", 0) if cached else 0
-    LOGGER.debug(
-        "Status requested logged_in=%s cache_available=%s last_refresh=%s channel_count=%s",
-        logged_in,
-        cache_available,
-        last_refresh,
-        channel_count,
+
+    channel_count = len(cached.get("channels", [])) if cached else 0
+
+    return StatusResponse(
+        logged_in=auth.has_credentials(),
+        refreshing=cache.is_refreshing(),
+        cache_available=cached is not None,
+        last_refresh=cached.get("timestamp") if cached else None,
+        channel_count=channel_count,
     )
-    return {
-        "logged_in": auth.has_credentials(),
-        "refreshing": cache.is_refreshing(),
-        "cache_available": cached is not None,
-        "last_refresh": cached.get("timestamp") if cached else None,
-        "channel_count": cached.get("channel_count", 0) if cached else 0,
-    }
+
 
 @router.get("/stats")
 def channel_stats() -> StatsResponse:
-    """Return aggregated channel counts from cache."""
-
+    """Return aggregated channel statistics (O(1))."""
     cached = cache.load_cache()
     if not cached:
         raise HTTPException(404, "No cache available")
 
-    counts = cache.get_stats(cached)
-    return StatsResponse(**counts)
+    stats = cached.get("stats")
+    if not stats:
+        raise HTTPException(500, "Statistics not available in cache")
+
+    return StatsResponse(
+        total=cached.get("channel_count", 0),
+        **stats,
+    )
+
 
 
 @router.get("/groups")
 def list_categories() -> dict[str, list[str]]:
-    """Return available channel categories based on cached data."""
-
+    """Return available channel categories (O(1))."""
     cached = cache.load_cache()
     if not cached:
         raise HTTPException(404, "No cache available")
-    categories = {
-        channel.get("category", "other") for channel in cached.get("channels", [])
-    }
-    return {"categories": sorted(categories)}
 
+    categories = cached.get("categories")
+    if categories is None:
+        raise HTTPException(500, "Categories not available in cache")
+
+    return {"categories": categories}
+
+
+# ---------------------------------------------------------------------------
+# HEALTH
+# ---------------------------------------------------------------------------
 
 @router.get("/health")
 def health_check() -> JSONResponse:
-    """Basic service health check endpoint."""
-
+    """Basic health check endpoint."""
     return JSONResponse(content={"status": "ok"})

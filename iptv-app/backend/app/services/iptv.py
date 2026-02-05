@@ -10,8 +10,8 @@ from urllib.parse import urlparse
 import requests
 import urllib3
 
-from app.config import get_settings
-from app.models import CredentialsIn
+from backend.app.config import get_settings
+from backend.app.models import CredentialsIn
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
