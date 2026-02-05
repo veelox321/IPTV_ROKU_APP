@@ -1,3 +1,6 @@
+# IPTV app (runtime / generated / deprecated)
+iptv-app/
+
 # Python
 __pycache__/
 *.pyc
