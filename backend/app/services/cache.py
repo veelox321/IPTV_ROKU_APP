@@ -54,11 +54,10 @@ def _normalize_channel(channel: dict[str, Any]) -> dict[str, Any]:
     """Ensure required channel fields exist."""
     channel.setdefault("name", "Unknown")
     channel.setdefault("url", "about:blank")
-    channel.setdefault("group", "Unknown")
-    channel.setdefault(
-        "category",
-        iptv.normalize_category(str(channel.get("group", ""))),
-    )
+    group = str(channel.get("group") or "Unknown").strip() or "Unknown"
+    channel["group"] = group
+    raw_category = str(channel.get("category") or "").strip()
+    channel["category"] = iptv.normalize_category(raw_category or group)
     return channel
 
 
@@ -72,12 +71,11 @@ def _compute_stats(channels: Iterable[dict[str, Any]]) -> dict[str, int]:
     }
 
     for ch in channels:
-        cat = (ch.get("category") or "").lower()
-        if cat not in stats:
-            cat = iptv.normalize_category(str(ch.get("group", "")))
-        if cat not in stats:
-            cat = "other"
-        stats[cat] += 1
+        raw_category = str(ch.get("category") or "").strip()
+        normalized = iptv.normalize_category(
+            raw_category or str(ch.get("group") or "")
+        )
+        stats[normalized if normalized in stats else "other"] += 1
 
     stats["total"] = sum(stats.values())
     return stats
@@ -239,18 +237,34 @@ def is_cache_valid(
 
 def get_stats(cache_payload: dict[str, Any] | None) -> dict[str, int]:
     """Return cached stats (O(1))."""
+    empty = {
+        "tv": 0,
+        "movies": 0,
+        "series": 0,
+        "other": 0,
+        "total": 0,
+    }
     if not cache_payload:
-        return {
-            "tv": 0,
-            "movies": 0,
-            "series": 0,
-            "other": 0,
-            "total": 0,
-        }
+        return empty
 
-    stats = cache_payload.get("stats", {})
-    stats["total"] = cache_payload.get(
-        "channel_count",
-        len(cache_payload.get("channels", [])),
+    channels = cache_payload.get("channels", [])
+    stats = cache_payload.get("stats")
+    if not isinstance(stats, dict) or any(
+        key not in stats for key in ("tv", "movies", "series", "other")
+    ):
+        stats = _compute_stats(channels)
+        cache_payload["stats"] = stats
+
+    stats["total"] = int(
+        stats.get(
+            "total",
+            cache_payload.get("channel_count", len(channels)),
+        )
     )
-    return stats
+    return {
+        "tv": int(stats.get("tv", 0)),
+        "movies": int(stats.get("movies", 0)),
+        "series": int(stats.get("series", 0)),
+        "other": int(stats.get("other", 0)),
+        "total": int(stats.get("total", 0)),
+    }
