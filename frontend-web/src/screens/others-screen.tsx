@@ -1,23 +1,22 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { SeriesCard } from "../components/series-card";
+import { ChannelCard } from "../components/channel-card";
 import { TVInstructions } from "../components/tv-instructions";
 import { TVSearchBox } from "../components/tv-search-box";
-import { series } from "../data/mock-data";
 import { ArrowLeft } from "lucide-react";
+import { useChannels } from "../hooks/use-channels";
 
-export function SeriesScreen() {
+export function OthersScreen() {
   const navigate = useNavigate();
   const [focusedIndex, setFocusedIndex] = useState(-1); // Start at search box
   const [searchQuery, setSearchQuery] = useState("");
-  const COLUMNS = 6;
+  const COLUMNS = 5;
 
-  const filteredSeries = useMemo(() => {
-    if (!searchQuery.trim()) return series;
-    return series.filter((item) =>
-      item.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery]);
+  const { channels, error, loading } = useChannels({
+    category: "other",
+    search: searchQuery,
+    pageSize: 60,
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -26,7 +25,7 @@ export function SeriesScreen() {
         switch (e.key) {
           case "ArrowDown":
             e.preventDefault();
-            if (filteredSeries.length > 0) {
+            if (channels.length > 0) {
               setFocusedIndex(0);
             }
             break;
@@ -47,9 +46,7 @@ export function SeriesScreen() {
             break;
           case "ArrowRight":
             e.preventDefault();
-            setFocusedIndex((prev) =>
-              Math.min(filteredSeries.length - 1, prev + 1)
-            );
+            setFocusedIndex((prev) => Math.min(channels.length - 1, prev + 1));
             break;
           case "ArrowUp":
             e.preventDefault();
@@ -63,7 +60,7 @@ export function SeriesScreen() {
           case "ArrowDown":
             e.preventDefault();
             setFocusedIndex((prev) =>
-              Math.min(filteredSeries.length - 1, prev + COLUMNS)
+              Math.min(channels.length - 1, prev + COLUMNS)
             );
             break;
           case "Backspace":
@@ -73,7 +70,7 @@ export function SeriesScreen() {
             break;
           case "Enter":
             e.preventDefault();
-            console.log("Selected series:", filteredSeries[focusedIndex]);
+            console.log("Selected channel:", channels[focusedIndex]);
             break;
         }
       }
@@ -81,7 +78,7 @@ export function SeriesScreen() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusedIndex, searchQuery, filteredSeries, navigate]);
+  }, [focusedIndex, searchQuery, channels, navigate]);
 
   return (
     <div className="min-h-screen bg-zinc-950 p-12">
@@ -94,7 +91,7 @@ export function SeriesScreen() {
           >
             <ArrowLeft className="w-8 h-8" />
           </button>
-          <h1 className="text-5xl font-bold text-white">Series</h1>
+          <h1 className="text-5xl font-bold text-white">Other Channels</h1>
         </div>
 
         <div className="mb-8">
@@ -103,29 +100,33 @@ export function SeriesScreen() {
             onChange={setSearchQuery}
             focused={focusedIndex === -1}
             onFocus={() => setFocusedIndex(-1)}
-            placeholder="Search series..."
+            placeholder="Search channels..."
           />
         </div>
 
-        {filteredSeries.length > 0 ? (
-          <div className="grid grid-cols-6 gap-6">
-            {filteredSeries.map((item, index) => (
-              <SeriesCard
-                key={item.id}
-                title={item.title}
-                seasons={item.seasons}
-                posterUrl={item.posterUrl}
+        {loading ? (
+          <div className="text-center text-zinc-400 text-2xl py-20">Loading…</div>
+        ) : error ? (
+          <div className="text-center text-red-400 text-2xl py-20">{error}</div>
+        ) : channels.length > 0 ? (
+          <div className="grid grid-cols-5 gap-6">
+            {channels.map((channel, index) => (
+              <ChannelCard
+                key={`${channel.url}-${index}`}
+                channelName={channel.name}
+                channelNumber={Number.parseInt(channel.tvg_chno ?? "0", 10) || index + 1}
+                logoUrl={channel.tvg_logo}
                 focused={focusedIndex === index}
                 onFocus={() => setFocusedIndex(index)}
                 onClick={() =>
-                  console.log("Clicked series:", filteredSeries[focusedIndex])
+                  console.log("Clicked channel:", channels[focusedIndex])
                 }
               />
             ))}
           </div>
         ) : (
           <div className="text-center text-zinc-500 text-2xl py-20">
-            No series found
+            No channels found
           </div>
         )}
       </div>

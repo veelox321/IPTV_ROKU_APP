@@ -1,5 +1,21 @@
-credentials.json
-channels_cache.json
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.pytest_cache/
 
+# Backend runtime cache
+backend/data/*.json
+!backend/data/.gitkeep
+
+# Node
+node_modules/
+frontend-web/node_modules/
+dist/
+
+# OS
+.DS_Store
