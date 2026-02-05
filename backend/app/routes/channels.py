@@ -27,7 +27,7 @@ from backend.app.services import auth, cache, iptv
 
 LOGGER = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["channels"])
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,14 @@ def get_channels(
     Pagination is streaming-safe (no full list slicing).
     """
 
+    LOGGER.info(
+        "Channels request page=%s page_size=%s search=%s category=%s group=%s",
+        page,
+        page_size,
+        search,
+        category,
+        group,
+    )
     cached = cache.load_cache()
     if not cached:
         raise HTTPException(
@@ -187,6 +195,7 @@ def channel_stats() -> StatsResponse:
         raise HTTPException(404, "No cache available")
 
     stats = cache.get_stats(cached)
+    LOGGER.info("Computed stats: %s", stats)
 
     return StatsResponse(
         total=stats.get("total", 0),
