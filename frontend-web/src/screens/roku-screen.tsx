@@ -8,7 +8,7 @@ import {
   type RokuStatusResponse,
 } from "../services/api";
 
-const tabs = ["Live TV", "Movies", "Series", "Status", "Refresh"] as const;
+const tabs = ["Live", "TV", "Movies", "Series"] as const;
 
 type TabKey = (typeof tabs)[number];
 
@@ -18,29 +18,49 @@ type ContentState = {
   error: string | null;
 };
 
-const categoryMap: Record<TabKey, string | null> = {
-  "Live TV": "tv",
+type Account = {
+  id: string;
+  username: string;
+  password: string;
+  url: string;
+};
+
+type StatusState = {
+  data: RokuStatusResponse | null;
+  loading: boolean;
+  error: string | null;
+};
+
+type Phase = "splash" | "accounts" | "add" | "home";
+
+const categoryMap: Record<TabKey, string> = {
+  Live: "tv",
+  TV: "tv",
   Movies: "movies",
   Series: "series",
-  Status: null,
-  Refresh: null,
 };
 
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleString() : "—";
 
+const storageKey = "iptv_accounts";
+
 export function RokuScreen() {
-  const [activeTab, setActiveTab] = useState<TabKey>("Live TV");
+  const [phase, setPhase] = useState<Phase>("splash");
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [activeAccount, setActiveAccount] = useState<Account | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("Live");
+  const [formState, setFormState] = useState({
+    username: "",
+    password: "",
+    url: "",
+  });
   const [contentState, setContentState] = useState<ContentState>({
     data: null,
     loading: false,
     error: null,
   });
-  const [statusState, setStatusState] = useState<{
-    data: RokuStatusResponse | null;
-    loading: boolean;
-    error: string | null;
-  }>({
+  const [statusState, setStatusState] = useState<StatusState>({
     data: null,
     loading: false,
     error: null,
@@ -51,7 +71,29 @@ export function RokuScreen() {
   const activeCategory = useMemo(() => categoryMap[activeTab], [activeTab]);
 
   useEffect(() => {
-    if (!activeCategory) {
+    const timer = window.setTimeout(() => {
+      setPhase("accounts");
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Account[];
+        if (Array.isArray(parsed)) {
+          setAccounts(parsed);
+        }
+      } catch {
+        setAccounts([]);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "home") {
       return;
     }
 
@@ -74,10 +116,10 @@ export function RokuScreen() {
     return () => {
       isMounted = false;
     };
-  }, [activeCategory]);
+  }, [activeCategory, phase]);
 
   useEffect(() => {
-    if (activeTab !== "Status") {
+    if (phase !== "home") {
       return;
     }
 
@@ -100,7 +142,7 @@ export function RokuScreen() {
     return () => {
       isMounted = false;
     };
-  }, [activeTab]);
+  }, [phase]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -110,6 +152,8 @@ export function RokuScreen() {
         const payload = await getRokuContent(activeCategory);
         setContentState({ data: payload, loading: false, error: null });
       }
+      const statusPayload = await getRokuStatus();
+      setStatusState({ data: statusPayload, loading: false, error: null });
     } catch (error) {
       console.error(error);
     } finally {
@@ -117,146 +161,264 @@ export function RokuScreen() {
     }
   };
 
+  const handleSelectAccount = (account: Account) => {
+    setActiveAccount(account);
+    setPhase("home");
+  };
+
+  const handleSaveAccount = () => {
+    if (!formState.username || !formState.password || !formState.url) {
+      return;
+    }
+    const newAccount: Account = {
+      id: `acct-${Date.now()}`,
+      username: formState.username,
+      password: formState.password,
+      url: formState.url,
+    };
+    const nextAccounts = [...accounts, newAccount];
+    setAccounts(nextAccounts);
+    localStorage.setItem(storageKey, JSON.stringify(nextAccounts));
+    setFormState({ username: "", password: "", url: "" });
+    handleSelectAccount(newAccount);
+  };
+
+  const flattenedItems = useMemo(() => {
+    if (!contentState.data?.rows) {
+      return [];
+    }
+    return contentState.data.rows.flatMap((row) =>
+      row.items.map((item) => ({
+        ...item,
+        category: row.title,
+      })),
+    );
+  }, [contentState.data]);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
-      <header className="flex items-center justify-between px-12 py-6 border-b border-zinc-800">
-        <div className="flex items-center gap-6">
-          <h1 className="text-3xl font-semibold">Futur IPTV</h1>
-          <nav className="flex items-center gap-3">
-            {tabs.map((tab) => (
+      {phase === "splash" && (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-6">
+          <h1 className="text-5xl font-semibold">IPTV</h1>
+          <div className="flex items-center gap-3 text-zinc-400">
+            <span className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
+            Chargement des comptes…
+          </div>
+        </div>
+      )}
+
+      {phase === "accounts" && (
+        <div className="min-h-screen flex flex-col items-center justify-center px-8">
+          <h1 className="text-4xl font-semibold mb-10">IPTV</h1>
+          <div className="w-full max-w-4xl grid md:grid-cols-[2fr_1fr] gap-10">
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold">Choisissez un utilisateur</h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {accounts.map((account) => (
+                  <button
+                    key={account.id}
+                    onClick={() => handleSelectAccount(account)}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left hover:border-blue-500 transition"
+                  >
+                    <div className="text-lg font-semibold">{account.username}</div>
+                    <div className="text-xs text-zinc-400 mt-1">{account.url}</div>
+                  </button>
+                ))}
+                {accounts.length === 0 && (
+                  <div className="text-zinc-400 text-sm">
+                    Aucun compte enregistré pour le moment.
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-4">
+              <h3 className="text-lg font-semibold">Nouveau compte</h3>
+              <p className="text-sm text-zinc-400">
+                Ajoutez un nouvel account IPTV et sauvegardez vos credentials.
+              </p>
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition ${
-                  activeTab === tab
-                    ? "bg-white text-zinc-950 shadow"
-                    : "bg-zinc-900 text-zinc-300 hover:text-white"
-                }`}
+                onClick={() => setPhase("add")}
+                className="w-full rounded-xl bg-white text-zinc-950 py-2 font-semibold"
               >
-                {tab}
+                Ajouter un compte
               </button>
-            ))}
-          </nav>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <input
-            placeholder="Search"
-            className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm">
-            Genre
-          </button>
-          <button className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm">
-            Sort: A–Z
-          </button>
+      )}
+
+      {phase === "add" && (
+        <div className="min-h-screen flex flex-col items-center justify-center px-8">
+          <div className="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900 p-8 space-y-6">
+            <div>
+              <h2 className="text-2xl font-semibold">Ajouter un account</h2>
+              <p className="text-sm text-zinc-400">
+                Entrez votre nom d’utilisateur, mot de passe et lien IPTV.
+              </p>
+            </div>
+            <div className="space-y-4">
+              <label className="block text-sm text-zinc-300">
+                Nom d’utilisateur
+                <input
+                  value={formState.username}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, username: event.target.value }))
+                  }
+                  className="mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="block text-sm text-zinc-300">
+                Mot de passe
+                <input
+                  type="password"
+                  value={formState.password}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, password: event.target.value }))
+                  }
+                  className="mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="block text-sm text-zinc-300">
+                Lien IPTV
+                <input
+                  value={formState.url}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, url: event.target.value }))
+                  }
+                  placeholder="https://example.com/playlist.m3u"
+                  className="mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={handleSaveAccount}
+                className="flex-1 rounded-xl bg-blue-500 text-white py-2 font-semibold"
+              >
+                Enregistrer
+              </button>
+              <button
+                onClick={() => setPhase("accounts")}
+                className="flex-1 rounded-xl border border-zinc-700 py-2 text-zinc-300"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
         </div>
-      </header>
+      )}
 
-      <main className="px-12 py-8 space-y-8">
-        {(activeTab === "Live TV" || activeTab === "Movies" || activeTab === "Series") && (
-          <section className="space-y-6">
-            {contentState.loading && (
-              <div className="text-zinc-400">Loading {activeTab.toLowerCase()}…</div>
-            )}
-            {contentState.error && (
-              <div className="text-red-400">{contentState.error}</div>
-            )}
-            {contentState.data?.rows.map((row) => (
-              <div key={row.title} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">{row.title}</h2>
-                  <span className="text-sm text-zinc-400">{row.items.length} items</span>
-                </div>
-                <div className="flex gap-4 overflow-x-auto pb-2">
-                  {row.items.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedItem(item)}
-                      className="flex-shrink-0 w-48 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-blue-500 transition"
-                    >
-                      <div className="h-28 w-full rounded-t-xl bg-zinc-800 flex items-center justify-center">
-                        {item.poster_url ? (
-                          <img
-                            src={item.poster_url}
-                            alt={item.title}
-                            className="h-full w-full object-cover rounded-t-xl"
-                          />
-                        ) : (
-                          <span className="text-xs text-zinc-400">No poster</span>
-                        )}
-                      </div>
-                      <div className="p-3 text-left">
-                        <div className="text-sm font-semibold line-clamp-1">{item.title}</div>
-                        <div className="text-xs text-zinc-400 line-clamp-1">{item.genre}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </section>
-        )}
+      {phase === "home" && (
+        <>
+          <header className="flex items-center justify-between px-12 py-6 border-b border-zinc-800">
+            <div className="flex items-center gap-6">
+              <h1 className="text-3xl font-semibold">IPTV</h1>
+              <nav
+                className={`flex items-center gap-3 ${isRefreshing ? "pointer-events-none opacity-60" : ""}`}
+              >
+                {tabs.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+                      activeTab === tab
+                        ? "bg-white text-zinc-950 shadow"
+                        : "bg-zinc-900 text-zinc-300 hover:text-white"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </nav>
+            </div>
+            <div className="text-sm text-zinc-400">
+              {activeAccount ? `Connecté: ${activeAccount.username}` : ""}
+            </div>
+          </header>
 
-        {activeTab === "Status" && (
-          <section className="max-w-3xl space-y-4">
-            <h2 className="text-2xl font-semibold">System Status</h2>
-            {statusState.loading && <div className="text-zinc-400">Loading status…</div>}
-            {statusState.error && <div className="text-red-400">{statusState.error}</div>}
-            {statusState.data && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-400">Last Refresh</div>
-                  <div className="text-lg font-semibold">
-                    {formatDate(statusState.data.last_refresh)}
-                  </div>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-400">Account Status</div>
-                  <div className="text-lg font-semibold text-green-400">
-                    {statusState.data.account_status}
-                  </div>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-400">Channels</div>
-                  <div className="text-lg font-semibold">{statusState.data.channels}</div>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-400">Movies</div>
-                  <div className="text-lg font-semibold">{statusState.data.movies}</div>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-400">Series</div>
-                  <div className="text-lg font-semibold">{statusState.data.series}</div>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-400">Playlists</div>
-                  <div className="text-lg font-semibold">{statusState.data.total_playlists}</div>
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {activeTab === "Refresh" && (
-          <section className="space-y-4">
-            <h2 className="text-2xl font-semibold">Refresh Playlists</h2>
-            <p className="text-zinc-400">
-              Keep your playlists up to date. While refreshing, playback and navigation are paused.
-            </p>
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className={`px-6 py-3 rounded-xl text-sm font-semibold transition ${
-                isRefreshing
-                  ? "bg-blue-500/60 text-white"
-                  : "bg-blue-500 text-white hover:bg-blue-400"
-              }`}
+          <main className="px-12 py-8 grid gap-8 lg:grid-cols-[1fr_320px]">
+            <section
+              className={`space-y-4 ${isRefreshing ? "pointer-events-none opacity-60" : ""}`}
             >
-              {isRefreshing ? "Refreshing…" : "Refresh Now"}
-            </button>
-          </section>
-        )}
-      </main>
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-semibold">{activeTab}</h2>
+                <span className="text-sm text-zinc-400">
+                  {flattenedItems.length} éléments
+                </span>
+              </div>
+              {contentState.loading && (
+                <div className="text-zinc-400">Chargement en cours…</div>
+              )}
+              {contentState.error && <div className="text-red-400">{contentState.error}</div>}
+              <div className="space-y-2">
+                {flattenedItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setSelectedItem(item)}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-left hover:border-blue-500 transition"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold">{item.title}</div>
+                        <div className="text-xs text-zinc-400">
+                          {item.category} • {item.genre}
+                        </div>
+                      </div>
+                      <span className="text-xs text-zinc-500">Voir</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <aside className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 h-fit">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Statut</h3>
+                <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className={`text-xs font-semibold ${
+                    isRefreshing
+                      ? "text-blue-300 cursor-not-allowed"
+                      : "text-blue-400 hover:text-blue-300"
+                  }`}
+                >
+                  {isRefreshing ? "Refresh…" : "Refresh"}
+                </button>
+              </div>
+              <div className="text-sm text-zinc-400">
+                Dernier refresh:{" "}
+                {statusState.loading ? "Chargement…" : formatDate(statusState.data?.last_refresh ?? null)}
+              </div>
+              {statusState.error && <div className="text-red-400 text-sm">{statusState.error}</div>}
+              {statusState.data && (
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Compte</span>
+                    <span className="text-green-400">{statusState.data.account_status}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Channels</span>
+                    <span>{statusState.data.channels}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Movies</span>
+                    <span>{statusState.data.movies}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Séries</span>
+                    <span>{statusState.data.series}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Playlists</span>
+                    <span>{statusState.data.total_playlists}</span>
+                  </div>
+                </div>
+              )}
+            </aside>
+          </main>
+        </>
+      )}
 
       {selectedItem && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center px-6">

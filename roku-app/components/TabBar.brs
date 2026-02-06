@@ -1,6 +1,6 @@
 sub init()
   m.tabList = m.top.findNode("tabList")
-  m.tabs = ["Live TV", "Movies", "Series", "Status", "Refresh"]
+  m.tabs = ["Live", "TV", "Movies", "Series"]
   m.tabList.content = buildTabs(m.tabs)
   m.tabList.observeField("itemSelected", "onItemSelected")
   m.tabList.setFocus(true)

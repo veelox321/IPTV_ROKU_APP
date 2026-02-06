@@ -5,9 +5,9 @@
   </interface>
   <children>
     <Rectangle width="1280" height="720" color="0x101418FF" />
-    <Label id="appTitle" text="Futur" translation="[0,300]" width="1280" height="60" horizAlign="center" font="font:LargeBoldSystemFont" />
+    <Label id="appTitle" text="IPTV" translation="[0,300]" width="1280" height="60" horizAlign="center" font="font:LargeBoldSystemFont" />
     <BusySpinner id="spinner" translation="[620,380]" />
-    <Label id="loadingText" text="Checking account…" translation="[0,460]" width="1280" height="40" horizAlign="center" visible="false" />
+    <Label id="loadingText" text="Loading accounts…" translation="[0,460]" width="1280" height="40" horizAlign="center" visible="false" />
   </children>
   <script type="text/brightscript"><![CDATA[
     sub init()

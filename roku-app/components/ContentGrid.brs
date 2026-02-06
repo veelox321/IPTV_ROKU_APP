@@ -1,19 +1,18 @@
 sub init()
-  m.rowList = m.top.findNode("rowList")
-  m.rowList.observeField("itemSelected", "onItemSelected")
+  m.list = m.top.findNode("list")
+  m.list.observeField("itemSelected", "onItemSelected")
   m.top.observeField("gridContent", "onGridContent")
 end sub
 
 sub onGridContent()
-  m.rowList.content = m.top.gridContent
+  m.list.content = m.top.gridContent
 end sub
 
 sub onItemSelected()
-  rowIndex = m.rowList.rowItemSelected[0]
-  itemIndex = m.rowList.rowItemSelected[1]
-  rowNode = m.rowList.content.getChild(rowIndex)
-  if rowNode <> invalid
-    selected = rowNode.getChild(itemIndex)
+  index = m.list.itemSelected
+  if index < 0 then return
+  selected = m.list.content.getChild(index)
+  if selected <> invalid
     m.top.selectedItem = selected
   end if
 end sub

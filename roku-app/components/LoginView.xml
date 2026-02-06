@@ -3,13 +3,30 @@
   <interface>
     <field id="loginResult" type="string" value="" />
     <field id="loginUsername" type="string" value="" />
+    <field id="loginPassword" type="string" value="" />
+    <field id="loginUrl" type="string" value="" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/LoginView.brs" />
   <children>
     <Rectangle width="1280" height="720" color="0x0D1117FF" />
-    <Label text="Sign In" translation="[80,80]" font="font:LargeBoldSystemFont" />
-    <LoginForm id="loginForm" translation="[80,160]" />
-    <BusySpinner id="authSpinner" translation="[600,520]" visible="false" />
-    <Label id="authError" translation="[80,560]" width="1120" height="40" color="0xFF5C5CFF" />
+    <Label text="IPTV" translation="[0,70]" width="1280" height="60" horizAlign="center" font="font:LargeBoldSystemFont" />
+
+    <Group id="selectorGroup" translation="[140,160]">
+      <Label text="Choisissez un utilisateur" font="font:MediumBoldSystemFont" />
+      <MarkupList id="accountList" translation="[0,60]" itemSize="[380,90]" numRows="4" itemComponentName="AccountCard" />
+      <Button id="addAccountButton" translation="[0,460]" width="380" height="60" text="Ajouter un nouvel account" />
+    </Group>
+
+    <Group id="formGroup" translation="[140,160]" visible="false">
+      <Label text="Ajouter un account" font="font:MediumBoldSystemFont" />
+      <AddAccountForm id="accountForm" translation="[0,60]" />
+      <Group translation="[0,320]">
+        <Button id="saveAccountButton" width="240" height="60" text="Enregistrer" />
+        <Button id="cancelAccountButton" translation="[260,0]" width="240" height="60" text="Annuler" />
+      </Group>
+    </Group>
+
+    <BusySpinner id="authSpinner" translation="[620,600]" visible="false" />
+    <Label id="authError" translation="[140,600]" width="1000" height="40" color="0xFF5C5CFF" />
   </children>
 </component>

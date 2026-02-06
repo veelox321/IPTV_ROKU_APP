@@ -6,6 +6,6 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/components/ContentGrid.brs" />
   <children>
-    <RowList id="rowList" translation="[0,0]" rowHeights="[180]" rowItemSize="[200,160]" rowLabelOffset="[0,0]" showRowLabel="true" />
+    <MarkupList id="list" translation="[0,0]" itemSize="[980,88]" numRows="6" itemComponentName="ContentListItem" />
   </children>
 </component>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="AddAccountForm" extends="Group">
+  <children>
+    <Label text="Nom d'utilisateur" translation="[0,0]" />
+    <TextEditBox id="usernameField" translation="[0,40]" width="520" height="50" />
+
+    <Label text="Mot de passe" translation="[0,110]" />
+    <TextEditBox id="passwordField" translation="[0,150]" width="520" height="50" secureMode="true" />
+
+    <Label text="Lien IPTV" translation="[0,220]" />
+    <TextEditBox id="urlField" translation="[0,260]" width="520" height="50" hintText="https://example.com/playlist.m3u" />
+  </children>
+</component>

@@ -4,8 +4,10 @@ sub init()
   m.homeView = m.top.findNode("homeView")
   m.playbackView = m.top.findNode("playbackView")
   m.loadingTextTimer = m.top.findNode("loadingTextTimer")
+  m.splashExitTimer = m.top.findNode("splashExitTimer")
 
   m.loadingTextTimer.observeField("fire", "onLoadingTextTimer")
+  m.splashExitTimer.observeField("fire", "onSplashExitTimer")
   m.loadingTextTimer.control = "start"
 
   m.loginView.observeField("loginResult", "onLoginResult")
@@ -16,15 +18,10 @@ sub init()
 end sub
 
 sub checkCredentials()
-  registry = CreateObject("roRegistrySection", "auth")
-  username = registry.Read("username")
-  token = registry.Read("token")
-
-  if username <> invalid and username <> "" and token <> invalid and token <> ""
-    showHome()
-  else
-    showLogin()
-  end if
+  m.splashView.visible = true
+  m.loginView.visible = false
+  m.homeView.visible = false
+  m.playbackView.visible = false
 end sub
 
 sub showLogin()
@@ -47,6 +44,8 @@ sub onLoginResult()
   if m.loginView.loginResult = "success"
     registry = CreateObject("roRegistrySection", "auth")
     registry.Write("username", m.loginView.loginUsername)
+    registry.Write("password", m.loginView.loginPassword)
+    registry.Write("url", m.loginView.loginUrl)
     registry.Write("token", "demo-token")
     registry.Flush()
     showHome()
@@ -56,7 +55,12 @@ end sub
 sub onLoadingTextTimer()
   if m.splashView.visible
     m.splashView.showLoadingText = true
+    m.splashExitTimer.control = "start"
   end if
+end sub
+
+sub onSplashExitTimer()
+  showLogin()
 end sub
 
 sub onRequestPlayback()
