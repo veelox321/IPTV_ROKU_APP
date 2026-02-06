@@ -18,15 +18,33 @@ type Credentials = {
 };
 
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    ...options,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...options,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "network error";
+    throw new Error(`API request failed: ${message}`);
+  }
 
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${response.statusText}`);
+    let detail = "";
+    try {
+      const payload = await response.json();
+      detail = JSON.stringify(payload);
+    } catch (error) {
+      try {
+        detail = await response.text();
+      } catch (textError) {
+        detail = "";
+      }
+    }
+    const detailSuffix = detail ? ` - ${detail}` : "";
+    throw new Error(`API ${response.status}: ${response.statusText}${detailSuffix}`);
   }
 
   return (await response.json()) as T;

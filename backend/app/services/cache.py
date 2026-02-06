@@ -37,6 +37,7 @@ _LAST_REFRESH_STATUS: str | None = None
 _LAST_REFRESH_ERROR: str | None = None
 _LAST_SUCCESSFUL_REFRESH: str | None = None
 _REFRESH_STARTED_AT: str | None = None
+_REFRESH_HEARTBEAT_AT: str | None = None
 _LOAD_LOG_COUNT = 0
 _LOAD_LOG_LIMIT = 5
 _CACHE_SCHEMA_VERSION = 1
@@ -153,23 +154,28 @@ def is_refreshing() -> bool:
 
 def set_refreshing(value: bool) -> None:
     """Set the refresh-in-progress flag."""
-    global _REFRESHING, _REFRESH_STARTED_AT, _LAST_REFRESH_STATUS
+    global _REFRESHING, _REFRESH_STARTED_AT, _LAST_REFRESH_STATUS, _REFRESH_HEARTBEAT_AT
     with _REFRESH_LOCK:
         _REFRESHING = value
         _REFRESH_STARTED_AT = _now().isoformat() if value else None
+        _REFRESH_HEARTBEAT_AT = _now().isoformat() if value else None
     if value:
         with _REFRESH_METADATA_LOCK:
             _LAST_REFRESH_STATUS = "loading"
+    else:
+        with _REFRESH_METADATA_LOCK:
+            _REFRESH_HEARTBEAT_AT = None
 
 
 def try_set_refreshing() -> bool:
     """Atomically set the refreshing flag if not already set."""
-    global _REFRESHING, _REFRESH_STARTED_AT, _LAST_REFRESH_STATUS
+    global _REFRESHING, _REFRESH_STARTED_AT, _LAST_REFRESH_STATUS, _REFRESH_HEARTBEAT_AT
     with _REFRESH_LOCK:
         if _REFRESHING:
             return False
         _REFRESHING = True
         _REFRESH_STARTED_AT = _now().isoformat()
+        _REFRESH_HEARTBEAT_AT = _REFRESH_STARTED_AT
     with _REFRESH_METADATA_LOCK:
         _LAST_REFRESH_STATUS = "loading"
         return True
@@ -187,6 +193,19 @@ def get_refresh_started_at() -> str | None:
     """Return the timestamp when refresh was set in motion."""
     with _REFRESH_LOCK:
         return _REFRESH_STARTED_AT
+
+
+def set_refresh_heartbeat_at(value: str | None = None) -> None:
+    """Set or clear the refresh heartbeat timestamp."""
+    global _REFRESH_HEARTBEAT_AT
+    with _REFRESH_METADATA_LOCK:
+        _REFRESH_HEARTBEAT_AT = value or _now().isoformat()
+
+
+def get_refresh_heartbeat_at() -> str | None:
+    """Return last refresh heartbeat timestamp."""
+    with _REFRESH_METADATA_LOCK:
+        return _REFRESH_HEARTBEAT_AT
 
 
 def get_refresh_metadata(cache_payload: dict[str, Any] | None) -> dict[str, Any]:

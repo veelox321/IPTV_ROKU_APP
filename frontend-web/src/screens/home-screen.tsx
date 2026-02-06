@@ -10,11 +10,13 @@ const STUCK_THRESHOLD_SECONDS = 120;
 
 export function HomeScreen() {
   const navigate = useNavigate();
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshStartedAt, setRefreshStartedAt] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [refreshResponse, setRefreshResponse] = useState<string | null>(null);
   const [status, setStatus] = useState<{
     loggedIn: boolean;
     refreshing: boolean;
@@ -22,6 +24,10 @@ export function HomeScreen() {
     lastRefresh: string | null;
     refreshStatus: string;
     refreshStartedAt: string | null;
+    refreshElapsedSeconds: number | null;
+    refreshHeartbeatAt: string | null;
+    refreshHeartbeatAgeSeconds: number | null;
+    refreshState: string;
     lastError: string | null;
   } | null>(null);
   const [stats, setStats] = useState<{
@@ -39,12 +45,13 @@ export function HomeScreen() {
   }, [elapsedSeconds, isRefreshing]);
 
   const refreshStateLabel = useMemo(() => {
+    if (status?.refreshState) return status.refreshState;
     if (status?.refreshStatus === "failed") return "failed";
     if (!isRefreshing) return "idle";
-    if (elapsedSeconds > STUCK_THRESHOLD_SECONDS) return "possibly stuck";
+    if (elapsedSeconds > STUCK_THRESHOLD_SECONDS) return "stuck";
     if (elapsedSeconds < 2) return "pending";
-    return "running";
-  }, [elapsedSeconds, isRefreshing, status?.refreshStatus]);
+    return "alive";
+  }, [elapsedSeconds, isRefreshing, status?.refreshState, status?.refreshStatus]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,10 +106,17 @@ export function HomeScreen() {
           lastRefresh: statusPayload.last_refresh,
           refreshStatus: statusPayload.refresh_status,
           refreshStartedAt: statusPayload.refresh_started_at,
+          refreshElapsedSeconds: statusPayload.refresh_elapsed_seconds,
+          refreshHeartbeatAt: statusPayload.refresh_heartbeat_at,
+          refreshHeartbeatAgeSeconds: statusPayload.refresh_heartbeat_age_seconds,
+          refreshState: statusPayload.refresh_state ?? "idle",
           lastError: statusPayload.last_error,
         });
         setIsRefreshing(statusPayload.refreshing);
         setRefreshStartedAt(statusPayload.refresh_started_at);
+        if (typeof statusPayload.refresh_elapsed_seconds === "number") {
+          setElapsedSeconds(statusPayload.refresh_elapsed_seconds);
+        }
         setStats({
           total: statsPayload.total,
           tv: statsPayload.tv,
@@ -157,9 +171,16 @@ export function HomeScreen() {
           lastRefresh: statusPayload.last_refresh,
           refreshStatus: statusPayload.refresh_status,
           refreshStartedAt: statusPayload.refresh_started_at,
+          refreshElapsedSeconds: statusPayload.refresh_elapsed_seconds,
+          refreshHeartbeatAt: statusPayload.refresh_heartbeat_at,
+          refreshHeartbeatAgeSeconds: statusPayload.refresh_heartbeat_age_seconds,
+          refreshState: statusPayload.refresh_state ?? prev?.refreshState ?? "idle",
           lastError: statusPayload.last_error,
         }));
         setRefreshStartedAt(statusPayload.refresh_started_at);
+        if (typeof statusPayload.refresh_elapsed_seconds === "number") {
+          setElapsedSeconds(statusPayload.refresh_elapsed_seconds);
+        }
 
         if (!statusPayload.refreshing) {
           setIsRefreshing(false);
@@ -232,12 +253,16 @@ export function HomeScreen() {
     console.log("=== REFRESHING CHANNELS ===");
 
     try {
-      await refreshChannels();
+      const response = await refreshChannels();
+      setRefreshResponse(JSON.stringify(response));
+      console.log("Refresh response:", response);
       setIsRefreshing(true);
       setRefreshStartedAt(new Date().toISOString());
+      setElapsedSeconds(0);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Refresh failed.";
       setStatusError(message);
+      setRefreshResponse(`error: ${message}`);
       setIsRefreshing(false);
     }
   };
@@ -250,9 +275,9 @@ export function HomeScreen() {
         <p className="text-center text-zinc-400 text-xl mb-12">
           {statusError || statsError
             ? "Backend unreachable"
-            : `Channels: ${stats?.total ?? 0} · Live: ${stats?.tv ?? 0} · Movies: ${
+            : `Channels: ${stats?.total ?? 0} | Live: ${stats?.tv ?? 0} | Movies: ${
                 stats?.movies ?? 0
-              } · Series: ${stats?.series ?? 0}`}
+              } | Series: ${stats?.series ?? 0}`}
         </p>
         <div className="flex gap-12 justify-center items-center mb-16">
           <TVButton focused={focusedIndex === 0} onFocus={() => setFocusedIndex(0)} onClick={() => handleSelect(0)}>
@@ -321,6 +346,16 @@ export function HomeScreen() {
             <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${refreshProgress}%` }} />
           </div>
           {status?.lastError && <p className="mt-3 text-sm text-red-400">Last refresh error: {status.lastError}</p>}
+          <div className="mt-4 text-xs text-zinc-400">
+            <div>API base URL: {apiBaseUrl}</div>
+            <div>Refresh response: {refreshResponse ?? "n/a"}</div>
+            <div>
+              Heartbeat age:{" "}
+              {status?.refreshHeartbeatAgeSeconds !== null && status?.refreshHeartbeatAgeSeconds !== undefined
+                ? `${status.refreshHeartbeatAgeSeconds}s`
+                : "n/a"}
+            </div>
+          </div>
         </div>
       </div>
     </div>

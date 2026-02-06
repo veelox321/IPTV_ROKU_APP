@@ -11,7 +11,15 @@ sub init()
   m.refreshModal = m.top.findNode("refreshModal")
   m.toast = m.top.findNode("toast")
   m.refreshTimer = m.top.findNode("refreshTimer")
+  m.progressTimer = m.top.findNode("progressTimer")
   m.toastTimer = m.top.findNode("toastTimer")
+
+  m.progressFill = m.refreshModal.findNode("progressFill")
+  m.progressLabel = m.refreshModal.findNode("progressLabel")
+  m.progressBarWidth = 320
+  m.refreshProgress = 0.0
+  m.refreshStart = invalid
+  m.refreshDurationSec = m.refreshTimer.duration
 
   m.activeTab = "Live"
   m.focusArea = "tabs"
@@ -22,6 +30,7 @@ sub init()
   m.moviesGrid.observeField("selectedItem", "onItemSelected")
   m.seriesGrid.observeField("selectedItem", "onItemSelected")
   m.refreshTimer.observeField("fire", "onRefreshComplete")
+  m.progressTimer.observeField("fire", "onProgressTick")
   m.toastTimer.observeField("fire", "onToastComplete")
 
   m.liveGrid.gridContent = buildSampleList("Live")
@@ -117,17 +126,45 @@ sub startRefresh()
   m.refreshLink.enabled = false
   m.lastRefreshLabel.text = "Dernier refresh: en cours..."
   m.refreshModal.visible = true
+
+  m.refreshProgress = 0.0
+  updateProgressUI(0.0)
+  m.refreshStart = CreateObject("roTimespan")
+  m.progressTimer.control = "start"
+
   m.refreshTimer.control = "start"
 end sub
 
 sub onRefreshComplete()
+  m.progressTimer.control = "stop"
+  updateProgressUI(1.0)
+
   m.refreshModal.visible = false
   m.refreshInProgress = false
   m.refreshLink.enabled = true
   m.lastRefreshLabel.text = "Dernier refresh: " + getCurrentTime()
-  m.toast.message = "Refresh terminé – " + getCurrentTime()
+  m.toast.message = "Refresh termine - " + getCurrentTime()
   m.toast.visible = true
   m.toastTimer.control = "start"
+end sub
+
+sub onProgressTick()
+  if m.refreshStart = invalid then return
+  elapsedMs = m.refreshStart.TotalMilliseconds()
+  progress = elapsedMs / (m.refreshDurationSec * 1000.0)
+  if progress > 0.95 then progress = 0.95
+  updateProgressUI(progress)
+end sub
+
+sub updateProgressUI(progress as Float)
+  if m.progressFill <> invalid
+    width = Int(m.progressBarWidth * progress)
+    m.progressFill.width = width
+  end if
+  if m.progressLabel <> invalid
+    pct = Int(progress * 100)
+    m.progressLabel.text = "Progress: " + pct.ToStr() + "%"
+  end if
 end sub
 
 sub onToastComplete()
@@ -166,7 +203,7 @@ function buildSampleList(prefix as String) as Object
   for i = 1 to 18
     item = CreateObject("roSGNode", "ContentNode")
     item.title = prefix + " " + i.ToStr()
-    item.description = "Sélection " + prefix + " avec lecture instantanée."
+    item.description = "Selection " + prefix + " avec lecture instantanee."
     item.duration = "120 min"
     item.genre = prefix
     item.rating = "PG-13"

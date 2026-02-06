@@ -4,7 +4,10 @@
     <Rectangle width="1280" height="720" color="0x000000AA" />
     <Group translation="[440,260]">
       <BusySpinner />
-      <Label text="Refreshing playlists…" translation="[0,80]" width="400" height="40" horizAlign="center" />
+      <Label text="Refreshing playlists..." translation="[0,80]" width="400" height="40" horizAlign="center" />
+      <Label id="progressLabel" text="Progress: 0%" translation="[0,110]" width="400" height="30" horizAlign="center" />
+      <Rectangle id="progressTrack" translation="[40,150]" width="320" height="12" color="0xFFFFFF22" />
+      <Rectangle id="progressFill" translation="[40,150]" width="0" height="12" color="0x3BD671FF" />
     </Group>
   </children>
 </component>

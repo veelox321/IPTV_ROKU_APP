@@ -15,6 +15,8 @@ import json
 import logging
 import os
 import sys
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Iterable
@@ -185,14 +187,26 @@ def _refresh_job(credentials: CredentialsIn, request_id: str) -> None:
         credentials.host,
     )
 
+    stop_heartbeat = threading.Event()
+    def heartbeat_loop() -> None:
+        while not stop_heartbeat.is_set():
+            cache.set_refresh_heartbeat_at()
+            stop_heartbeat.wait(5)
+
+    heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    heartbeat_thread.start()
+
     try:
+        cache.set_refresh_heartbeat_at()
         LOGGER.info(
             "[REFRESH] Using stored credentials request_id=%s host=%s",
             request_id,
             credentials.host,
         )
         playlist = iptv.fetch_m3u(credentials, request_id=request_id)
+        cache.set_refresh_heartbeat_at()
         channels = iptv.parse_m3u(playlist, request_id=request_id)
+        cache.set_refresh_heartbeat_at()
 
         LOGGER.info(
             "[REFRESH] Parsed %d channels request_id=%s",
@@ -200,6 +214,7 @@ def _refresh_job(credentials: CredentialsIn, request_id: str) -> None:
             request_id,
         )
         cache.save_cache(credentials.host, channels)
+        cache.set_refresh_heartbeat_at()
         cache.set_last_error(None)
 
     except Exception as exc:
@@ -210,6 +225,7 @@ def _refresh_job(credentials: CredentialsIn, request_id: str) -> None:
         )
 
     finally:
+        stop_heartbeat.set()
         cache.set_refreshing(False)
         LOGGER.info(
             "[REFRESH] Background refresh finished request_id=%s",
@@ -218,8 +234,11 @@ def _refresh_job(credentials: CredentialsIn, request_id: str) -> None:
 
 
 @router.post("/refresh")
-def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
+def refresh_channels(background_tasks: BackgroundTasks, request: Request) -> dict[str, str | bool | None]:
     """Trigger a non-blocking refresh of the channel cache."""
+
+    client_host = request.client.host if request.client else "unknown"
+    LOGGER.info("[REFRESH] Refresh requested client=%s", client_host)
 
     if not auth.has_credentials():
         LOGGER.info("[REFRESH] Refresh requested without active account")
@@ -227,7 +246,12 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
 
     if not cache.try_set_refreshing():
         LOGGER.info("[REFRESH] Refresh requested while another refresh is in progress")
-        raise HTTPException(409, "already refreshing")
+        return {
+            "status": "already_refreshing",
+            "refreshing": True,
+            "refresh_started_at": cache.get_refresh_started_at(),
+            "refresh_heartbeat_at": cache.get_refresh_heartbeat_at(),
+        }
 
     credentials = auth.get_credentials()
     if credentials is None:
@@ -242,7 +266,12 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
         credentials.host,
     )
     background_tasks.add_task(_refresh_job, credentials, request_id)
-    return {"status": "started"}
+    return {
+        "status": "started",
+        "refreshing": True,
+        "refresh_started_at": cache.get_refresh_started_at(),
+        "refresh_heartbeat_at": cache.get_refresh_heartbeat_at(),
+    }
 
 
 # ============================================================================
@@ -255,6 +284,38 @@ def status() -> StatusResponse:
 
     cached = cache.load_cache()
     refresh_metadata = cache.get_refresh_metadata(cached)
+    refresh_started_at = cache.get_refresh_started_at()
+    refresh_heartbeat_at = cache.get_refresh_heartbeat_at()
+    refresh_elapsed_seconds = None
+    refresh_heartbeat_age_seconds = None
+    refresh_state = "idle"
+
+    if refresh_started_at:
+        try:
+            started = datetime.fromisoformat(refresh_started_at)
+            now = datetime.now(timezone.utc)
+            refresh_elapsed_seconds = max(0, int((now - started).total_seconds()))
+        except Exception:
+            refresh_elapsed_seconds = None
+    if refresh_heartbeat_at:
+        try:
+            heartbeat = datetime.fromisoformat(refresh_heartbeat_at)
+            now = datetime.now(timezone.utc)
+            refresh_heartbeat_age_seconds = max(0, int((now - heartbeat).total_seconds()))
+        except Exception:
+            refresh_heartbeat_age_seconds = None
+
+    if refresh_metadata["refresh_status"] == "failed":
+        refresh_state = "failed"
+    elif cache.is_refreshing():
+        if refresh_heartbeat_age_seconds is not None and refresh_heartbeat_age_seconds > 15:
+            refresh_state = "stuck"
+        elif refresh_elapsed_seconds is None or refresh_elapsed_seconds < 2:
+            refresh_state = "pending"
+        else:
+            refresh_state = "alive"
+    else:
+        refresh_state = "idle"
 
     return StatusResponse(
         logged_in=auth.has_credentials(),
@@ -262,7 +323,11 @@ def status() -> StatusResponse:
         cache_available=cached is not None,
         last_refresh=cached.get("timestamp") if cached else None,
         channel_count=cached.get("channel_count", 0) if cached else 0,
-        refresh_started_at=cache.get_refresh_started_at(),
+        refresh_started_at=refresh_started_at,
+        refresh_elapsed_seconds=refresh_elapsed_seconds,
+        refresh_heartbeat_at=refresh_heartbeat_at,
+        refresh_heartbeat_age_seconds=refresh_heartbeat_age_seconds,
+        refresh_state=refresh_state,
         refresh_status=refresh_metadata["refresh_status"],
         last_error=refresh_metadata["last_error"],
         last_successful_refresh=refresh_metadata["last_successful_refresh"],

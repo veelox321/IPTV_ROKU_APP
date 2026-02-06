@@ -6,7 +6,7 @@
     <Label id="lastRefreshLabel" text="Dernier refresh: 09:42" translation="[20,56]" />
     <Label text="Channels: 320" translation="[20,92]" />
     <Label text="Movies: 1,240" translation="[20,124]" />
-    <Label text="Séries: 180" translation="[20,156]" />
+    <Label text="Series: 180" translation="[20,156]" />
     <Label id="accountStatus" text="Compte: Actif" translation="[20,188]" color="0x3BD671FF" />
     <Button id="refreshLink" translation="[20,216]" width="140" height="36" text="Refresh" />
   </children>

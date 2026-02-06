@@ -41,6 +41,10 @@ class StatusResponse(BaseModel):
     last_refresh: str | None
     channel_count: int
     refresh_started_at: str | None = None
+    refresh_elapsed_seconds: int | None = None
+    refresh_heartbeat_at: str | None = None
+    refresh_heartbeat_age_seconds: int | None = None
+    refresh_state: str = "idle"
     refresh_status: str = "success"
     last_error: str | None = None
     last_successful_refresh: str | None = None

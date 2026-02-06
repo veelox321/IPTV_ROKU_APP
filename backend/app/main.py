@@ -69,14 +69,14 @@ app = FastAPI(
 )
 
 # -----------------------------------------------------------------------------
-# CORS (OBLIGATOIRE pour Streamlit / UI / navigateur)
+# CORS (required for UI / browser)
 # -----------------------------------------------------------------------------
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # dev only
+    allow_origins=["*"],  # dev only
     allow_credentials=True,
-    allow_methods=["*"],          # inclut OPTIONS
+    allow_methods=["*"],  # includes OPTIONS
     allow_headers=["*"],
 )
 
@@ -102,7 +102,7 @@ app.add_middleware(
 app.include_router(channels_router)
 
 # -----------------------------------------------------------------------------
-# Middleware de logging HTTP (debug only)
+# HTTP logging middleware (debug only)
 # -----------------------------------------------------------------------------
 
 @app.middleware("http")
@@ -115,14 +115,14 @@ async def log_routes(request: Request, call_next):
     if not settings.debug:
         return await call_next(request)
 
-    LOGGER.debug("→ %s %s", request.method, request.url.path)
+    LOGGER.debug("-> %s %s", request.method, request.url.path)
     start_time = time.monotonic()
 
     response = await call_next(request)
 
     duration_ms = (time.monotonic() - start_time) * 1000
     LOGGER.debug(
-        "← %s %s status=%s duration_ms=%.2f",
+        "<- %s %s status=%s duration_ms=%.2f",
         request.method,
         request.url.path,
         response.status_code,
@@ -132,7 +132,7 @@ async def log_routes(request: Request, call_next):
 
 
 # -----------------------------------------------------------------------------
-# Health check (utile pour debug, Docker, Roku, etc.)
+# Health check (useful for debug, Docker, Roku, etc.)
 # -----------------------------------------------------------------------------
 
 @app.get("/health")
