@@ -4,10 +4,7 @@ FastAPI application entrypoint.
 
 from contextlib import asynccontextmanager
 import logging
-import os
-import sys
 import time
-import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +24,14 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.debug)
     LOGGER.debug("Application startup.")
+    LOGGER.info(
+        "Config summary debug=%s cache_dir=%s cache_ttl_seconds=%s verify_ssl=%s credentials_file=%s",
+        settings.debug,
+        settings.cache_dir,
+        settings.cache_ttl_seconds,
+        settings.verify_ssl,
+        settings.credentials_file,
+    )
     try:
         credentials = accounts.load_credentials()
         if credentials:
@@ -48,8 +53,6 @@ async def lifespan(app: FastAPI):
             route.name,
             endpoint,
         )
-    if auth.load_credentials_from_file(settings.credentials_file):
-        LOGGER.info("Credentials loaded from file during startup.")
     yield
 
     LOGGER.info("Application shutdown")

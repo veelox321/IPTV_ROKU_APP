@@ -7,6 +7,7 @@ import json
 import logging
 import threading
 
+from backend.app.config import get_settings
 from backend.app.models import CredentialsIn
 
 LOGGER = logging.getLogger(__name__)
@@ -14,12 +15,9 @@ LOGGER = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 
 
-def _data_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "data"
-
-
 def _credentials_path() -> Path:
-    return _data_dir() / "credentials.json"
+    settings = get_settings()
+    return settings.credentials_file
 
 
 def _atomic_write(path: Path, payload: dict[str, str]) -> None:
@@ -31,7 +29,11 @@ def _atomic_write(path: Path, payload: dict[str, str]) -> None:
 
 
 def save_credentials(credentials: CredentialsIn) -> None:
-    """Persist credentials to disk atomically."""
+    """Persist credentials to disk atomically.
+
+    Security note: credentials are stored locally on disk in a Git-ignored
+    location to prevent accidental commits.
+    """
     payload = credentials.model_dump()
     path = _credentials_path()
     with _LOCK:

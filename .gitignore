@@ -16,9 +16,17 @@ backend/data/*.json
 !backend/data/.gitkeep
 backend/.cache/
 backend/cache/
+backend/.local/
 **/channels.json
 backend/app/data/credentials.json
 backend/app/data/*.json
+
+# Local credentials/cache/playlists (never commit)
+.local/
+**/.local/
+**/credentials.json
+**/cache/
+**/playlists/
 
 # Node
 node_modules/

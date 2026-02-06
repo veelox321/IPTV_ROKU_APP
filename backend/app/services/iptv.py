@@ -92,7 +92,7 @@ def build_m3u_url(credentials: CredentialsIn) -> str:
     return f"http://{host}/playlist/{credentials.username}/{credentials.password}/m3u"
 
 
-def fetch_m3u(credentials: CredentialsIn) -> str:
+def fetch_m3u(credentials: CredentialsIn, request_id: str | None = None) -> str:
     """Fetch the M3U playlist for provided credentials."""
 
     if not credentials.host or not credentials.username or not credentials.password:
@@ -100,7 +100,7 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
 
     settings = get_settings()
     url = build_m3u_url(credentials)
-    LOGGER.info("[REFRESH] M3U download start: url=%s", url)
+    LOGGER.info("[REFRESH] M3U download start request_id=%s url=%s", request_id, url)
 
     session = requests.Session()
     adapter = HTTPAdapter()
@@ -124,20 +124,22 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
                 )
                 elapsed = time.monotonic() - start
                 LOGGER.info(
-                    "[REFRESH] attempt %s/%s response status=%s elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s response status=%s elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     response.status_code,
                     elapsed,
+                    request_id,
                 )
                 if response.status_code != 200:
                     raise _FetchFailure(f"HTTP {response.status_code}")
 
                 playlist_text = response.text or ""
                 LOGGER.info(
-                    "[REFRESH] M3U download complete: bytes=%s elapsed=%.2fs",
+                    "[REFRESH] M3U download complete: bytes=%s elapsed=%.2fs request_id=%s",
                     len(playlist_text.encode("utf-8")),
                     elapsed,
+                    request_id,
                 )
                 if not playlist_text.strip():
                     raise _FetchFailure("empty playlist")
@@ -147,61 +149,67 @@ def fetch_m3u(credentials: CredentialsIn) -> str:
                 last_exc = exc
                 last_reason = "ssl_error"
                 LOGGER.warning(
-                    "[REFRESH] attempt %s/%s failed: ssl_error elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s failed: ssl_error elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     elapsed,
+                    request_id,
                 )
             except requests.exceptions.Timeout as exc:
                 elapsed = time.monotonic() - start
                 last_exc = exc
                 last_reason = "timeout"
                 LOGGER.warning(
-                    "[REFRESH] attempt %s/%s failed: timeout elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s failed: timeout elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     elapsed,
+                    request_id,
                 )
             except requests.exceptions.ConnectionError as exc:
                 elapsed = time.monotonic() - start
                 last_exc = exc
                 last_reason = "connection_error"
                 LOGGER.warning(
-                    "[REFRESH] attempt %s/%s failed: connection_error elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s failed: connection_error elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     elapsed,
+                    request_id,
                 )
             except _FetchFailure as exc:
                 elapsed = time.monotonic() - start
                 last_exc = exc
                 last_reason = str(exc)
                 LOGGER.warning(
-                    "[REFRESH] attempt %s/%s failed: %s elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s failed: %s elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     exc,
                     elapsed,
+                    request_id,
                 )
             except requests.exceptions.RequestException as exc:
                 elapsed = time.monotonic() - start
                 last_exc = exc
                 last_reason = "request_error"
                 LOGGER.warning(
-                    "[REFRESH] attempt %s/%s failed: request_error elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s failed: request_error elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     elapsed,
+                    request_id,
                 )
             except Exception as exc:
                 elapsed = time.monotonic() - start
                 last_exc = exc
                 last_reason = "unexpected_error"
                 LOGGER.warning(
-                    "[REFRESH] attempt %s/%s failed: unexpected_error elapsed=%.2fs",
+                    "[REFRESH] attempt %s/%s failed: unexpected_error elapsed=%.2fs request_id=%s",
                     attempt,
                     attempts,
                     elapsed,
+                    request_id,
                 )
 
             if attempt < attempts:
@@ -230,9 +238,19 @@ def _safe_text(value: str | None, fallback: str) -> str:
     return cleaned if cleaned else fallback
 
 
-import re
-
-ATTR_RE = re.compile(r'([\w\-]+)="([^"]*)"')
+EXTINF_LOG_LIMIT = 10
+PARSE_SAMPLE_LIMIT = 5
+KNOWN_ATTR_KEYS = {
+    "tvg-id",
+    "tvg-name",
+    "tvg-logo",
+    "tvg-chno",
+    "group-title",
+    "group",
+    "category",
+    "type",
+    "tvg-group",
+}
 
 def _parse_extinf_line(line: str) -> tuple[dict[str, str], str]:
     """
@@ -298,11 +316,12 @@ def coerce_category(category: str | None, group: str | None = None) -> str:
 
 
 
-def parse_m3u(playlist_text: str) -> list[dict]:
+def parse_m3u(playlist_text: str, request_id: str | None = None) -> list[dict]:
     """Parse the M3U playlist into a list of normalized channel dictionaries."""
 
     channels: list[dict[str, Any]] = []
     pending: dict[str, Any] | None = None
+    extinf_logged = 0
 
     for raw_line in playlist_text.splitlines():
         line = raw_line.strip()
@@ -312,10 +331,29 @@ def parse_m3u(playlist_text: str) -> list[dict]:
         if line.startswith("#EXTINF"):
             try:
                 attrs, display_name = _parse_extinf_line(line)
-            except Exception:
-                LOGGER.debug("Skipping malformed EXTINF line: %s", line)
+            except Exception as exc:
+                LOGGER.warning(
+                    "[PARSE] Skipping malformed EXTINF line request_id=%s error=%s line=%s",
+                    request_id,
+                    exc,
+                    line,
+                )
                 pending = None
                 continue
+
+            if extinf_logged < EXTINF_LOG_LIMIT:
+                LOGGER.info(
+                    "[PARSE] EXTINF raw request_id=%s line=%s",
+                    request_id,
+                    line,
+                )
+                LOGGER.info(
+                    "[PARSE] EXTINF attrs request_id=%s attrs=%s display_name=%s",
+                    request_id,
+                    attrs,
+                    display_name,
+                )
+                extinf_logged += 1
 
             group = _derive_group(attrs)
             pending = {
@@ -323,8 +361,21 @@ def parse_m3u(playlist_text: str) -> list[dict]:
                 "group": group,
                 "category": normalize_category(group),
             }
-            if len(channels) < 10:
-                LOGGER.info("[DEBUG] group=%s attrs=%s name=%s", group, attrs, display_name)
+            if extinf_logged <= EXTINF_LOG_LIMIT:
+                LOGGER.info(
+                    "[PARSE] group decision request_id=%s group=%s category=%s name=%s",
+                    request_id,
+                    group,
+                    pending["category"],
+                    display_name,
+                )
+            unknown_keys = sorted(set(attrs) - KNOWN_ATTR_KEYS)
+            if unknown_keys:
+                LOGGER.debug(
+                    "[PARSE] Unknown EXTINF attrs request_id=%s keys=%s",
+                    request_id,
+                    unknown_keys,
+                )
             tvg_id = _safe_text(attrs.get("tvg-id"), "")
             tvg_name = _safe_text(attrs.get("tvg-name"), "")
             tvg_logo = _safe_text(attrs.get("tvg-logo"), "")
@@ -362,6 +413,30 @@ def parse_m3u(playlist_text: str) -> list[dict]:
         pending["url"] = _safe_text(pending.get("url"), "about:blank")
         channels.append(pending)
 
+    if channels:
+        sample = channels[:PARSE_SAMPLE_LIMIT]
+        LOGGER.info(
+            "[PARSE] Sample channels request_id=%s sample=%s",
+            request_id,
+            sample,
+        )
+        group_counts: dict[str, int] = {}
+        category_counts: dict[str, int] = {}
+        for ch in channels:
+            group = str(ch.get("group") or "Unknown").strip() or "Unknown"
+            group_counts[group] = group_counts.get(group, 0) + 1
+            category = str(ch.get("category") or "other").strip().lower() or "other"
+            category_counts[category] = category_counts.get(category, 0) + 1
+        LOGGER.info(
+            "[PARSE] Group distribution request_id=%s groups=%s",
+            request_id,
+            dict(sorted(group_counts.items(), key=lambda item: item[1], reverse=True)[:10]),
+        )
+        LOGGER.info(
+            "[PARSE] Category distribution request_id=%s categories=%s",
+            request_id,
+            category_counts,
+        )
     return channels
 
 

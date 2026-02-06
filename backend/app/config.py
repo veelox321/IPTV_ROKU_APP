@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_CACHE_DIR = Path(
     os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"),
 ) / "iptv_roku_app"
-DEFAULT_CREDENTIALS_FILE = Path(__file__).resolve().parents[1] / "data" / "credentials.json"
+DEFAULT_CREDENTIALS_FILE = Path(__file__).resolve().parents[1] / ".local" / "credentials.json"
 
 
 class Settings(BaseSettings):

@@ -15,8 +15,7 @@ import json
 import logging
 import os
 import sys
-import threading
-import time
+import uuid
 from datetime import datetime, timezone
 from typing import Iterable
 from urllib.parse import urlparse
@@ -25,6 +24,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 import requests
 
+from backend.app.config import get_settings
 from backend.app.models import (
     ChannelListResponse,
     CredentialsIn,
@@ -175,28 +175,48 @@ def get_channels(
 # REFRESH (BACKGROUND)
 # ============================================================================
 
-def _refresh_job(credentials: CredentialsIn) -> None:
+def _refresh_job(credentials: CredentialsIn, request_id: str) -> None:
     """Background task: fetch, parse and cache IPTV playlist."""
-    LOGGER.info("[REFRESH] Background refresh started host=%s", credentials.host)
+    LOGGER.info(
+        "[REFRESH] Background refresh started request_id=%s host=%s",
+        request_id,
+        credentials.host,
+    )
 
     try:
-        LOGGER.info("[REFRESH] Using stored credentials host=%s", credentials.host)
-        playlist = iptv.fetch_m3u(credentials)
-        channels = iptv.parse_m3u(playlist)
+        LOGGER.info(
+            "[REFRESH] Using stored credentials request_id=%s host=%s",
+            request_id,
+            credentials.host,
+        )
+        playlist = iptv.fetch_m3u(credentials, request_id=request_id)
+        channels = iptv.parse_m3u(playlist, request_id=request_id)
 
-        LOGGER.info("[REFRESH] Parsed %d channels", len(channels))
+        LOGGER.info(
+            "[REFRESH] Parsed %d channels request_id=%s",
+            len(channels),
+            request_id,
+        )
         cache.save_cache(credentials.host, channels)
+        cache.set_last_error(None)
 
-    except Exception:
-        LOGGER.exception("[REFRESH] Background refresh failed")
+    except Exception as exc:
+        cache.set_last_error(str(exc))
+        LOGGER.exception(
+            "[REFRESH] Background refresh failed request_id=%s",
+            request_id,
+        )
 
     finally:
         cache.set_refreshing(False)
-        LOGGER.info("[REFRESH] Background refresh finished")
+        LOGGER.info(
+            "[REFRESH] Background refresh finished request_id=%s",
+            request_id,
+        )
 
 
 @router.post("/refresh")
-def refresh_channels(background_tasks: BackgroundTasks, request: Request) -> dict[str, str]:
+def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Trigger a non-blocking refresh of the channel cache."""
 
     if not auth.has_credentials():
@@ -213,11 +233,13 @@ def refresh_channels(background_tasks: BackgroundTasks, request: Request) -> dic
         LOGGER.info("[REFRESH] Refresh requested but credentials missing in memory")
         raise HTTPException(409, "not logged in")
 
+    request_id = str(uuid.uuid4())
     LOGGER.info(
-        "[REFRESH] Using stored credentials host=%s timeout=20s",
+        "[REFRESH] Using stored credentials request_id=%s host=%s timeout=20s",
+        request_id,
         credentials.host,
     )
-    background_tasks.add_task(_refresh_job, credentials)
+    background_tasks.add_task(_refresh_job, credentials, request_id)
     return {"status": "started"}
 
 

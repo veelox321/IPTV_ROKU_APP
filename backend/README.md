@@ -14,7 +14,7 @@ Une fois le compte enregistré, il reste disponible après redémarrage grâce �
 Les credentials sont stockés localement dans :
 
 ```
-backend/app/data/credentials.json
+backend/.local/credentials.json
 ```
 
 Ce fichier est **ignoré par Git** (`.gitignore`) afin d'éviter tout commit accidentel.
