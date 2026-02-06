@@ -8,6 +8,7 @@
     <Group id="playbackView" visible="false">
       <Video id="videoPlayer" width="1280" height="720" />
     </Group>
-    <Timer id="loadingTextTimer" duration="3" repeat="false" />
+    <Timer id="loadingTextTimer" duration="2" repeat="false" />
+    <Timer id="splashExitTimer" duration="1.5" repeat="false" />
   </children>
 </component>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="AccountCard" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" />
+  </interface>
+  <children>
+    <Rectangle id="background" width="360" height="80" color="0x19212AFF" />
+    <Label id="title" translation="[16,14]" width="320" height="30" font="font:MediumBoldSystemFont" />
+    <Label id="subtitle" translation="[16,42]" width="320" height="24" color="0xA9B2BDFF" />
+  </children>
+  <script type="text/brightscript"><![CDATA[
+    sub init()
+      m.title = m.top.findNode("title")
+      m.subtitle = m.top.findNode("subtitle")
+      m.top.observeField("itemContent", "onItemContent")
+    end sub
+
+    sub onItemContent()
+      item = m.top.itemContent
+      if item = invalid then return
+      m.title.text = item.title
+      m.subtitle.text = item.shortDescriptionLine1
+    end sub
+  ]]></script>
+</component>

@@ -2,7 +2,7 @@
 <component name="TabBar" extends="Group">
   <interface>
     <field id="tabs" type="assocarray" />
-    <field id="selectedTab" type="string" value="Live TV" />
+    <field id="selectedTab" type="string" value="Live" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/TabBar.brs" />
   <children>

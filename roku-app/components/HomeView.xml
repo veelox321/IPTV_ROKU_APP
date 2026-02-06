@@ -9,22 +9,16 @@
     <Rectangle width="1280" height="720" color="0x0B0F14FF" />
     <Group id="topBar" translation="[60,40]">
       <TabBar id="tabBar" />
-      <TextEditBox id="searchInput" translation="[420,0]" width="300" height="42" hintText="Search" />
-      <Label id="filterLabel" translation="[740,8]" text="Genre" />
-      <Label id="sortLabel" translation="[900,8]" text="Sort: A–Z" />
     </Group>
 
     <Group id="contentPane" translation="[60,120]">
       <ContentGrid id="liveGrid" />
+      <ContentGrid id="tvGrid" visible="false" />
       <ContentGrid id="moviesGrid" visible="false" />
       <ContentGrid id="seriesGrid" visible="false" />
-      <StatusPanel id="statusPanel" visible="false" />
-      <Group id="refreshPanel" visible="false">
-        <Label text="Refresh Playlists" translation="[0,0]" font="font:LargeBoldSystemFont" />
-        <Button id="refreshButton" translation="[0,60]" width="360" height="60" text="Refresh Now" />
-      </Group>
     </Group>
 
+    <StatusPanel id="statusPanel" translation="[860,120]" />
     <DetailView id="detailView" visible="false" translation="[120,120]" />
     <RefreshModal id="refreshModal" visible="false" />
     <Toast id="toast" visible="false" />
