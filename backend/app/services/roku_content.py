@@ -73,8 +73,10 @@ def build_rows(channels: Iterable[dict], category: str) -> list[dict]:
     return rows[:_ROW_LIMIT]
 
 
-def build_status_payload(cache_payload: dict | None) -> dict:
+def build_status_payload(cache_payload: dict | None, refresh_metadata: dict | None = None, refreshing: bool = False, refresh_started_at: str | None = None) -> dict:
     """Return summary metrics used by Roku status panel."""
+
+    metadata = refresh_metadata or {}
 
     if not cache_payload:
         return {
@@ -85,6 +87,10 @@ def build_status_payload(cache_payload: dict | None) -> dict:
             "episodes": 0,
             "total_playlists": 0,
             "account_status": "Disconnected",
+            "refreshing": refreshing,
+            "refresh_status": metadata.get("refresh_status", "missing"),
+            "refresh_started_at": refresh_started_at,
+            "last_error": metadata.get("last_error"),
         }
 
     stats = cache_payload.get("stats", {}) if isinstance(cache_payload, dict) else {}
@@ -96,4 +102,8 @@ def build_status_payload(cache_payload: dict | None) -> dict:
         "episodes": 0,
         "total_playlists": 1,
         "account_status": "Active",
+        "refreshing": refreshing,
+        "refresh_status": metadata.get("refresh_status", "success"),
+        "refresh_started_at": refresh_started_at,
+        "last_error": metadata.get("last_error"),
     }

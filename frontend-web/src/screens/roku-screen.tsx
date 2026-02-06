@@ -8,6 +8,9 @@ import {
   type RokuStatusResponse,
 } from "../services/api";
 
+
+const EXPECTED_REFRESH_SECONDS = 45;
+const STUCK_THRESHOLD_SECONDS = 120;
 const tabs = ["Live", "TV", "Movies", "Series"] as const;
 
 type TabKey = (typeof tabs)[number];
@@ -67,6 +70,7 @@ export function RokuScreen() {
   });
   const [selectedItem, setSelectedItem] = useState<RokuContentItem | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const activeCategory = useMemo(() => categoryMap[activeTab], [activeTab]);
 
@@ -145,18 +149,14 @@ export function RokuScreen() {
   }, [phase]);
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
+    setStatusState((prev) => ({ ...prev, error: null }));
     try {
       await refreshChannels();
-      if (activeCategory) {
-        const payload = await getRokuContent(activeCategory);
-        setContentState({ data: payload, loading: false, error: null });
-      }
-      const statusPayload = await getRokuStatus();
-      setStatusState({ data: statusPayload, loading: false, error: null });
+      setIsRefreshing(true);
+      setElapsedSeconds(0);
     } catch (error) {
-      console.error(error);
-    } finally {
+      const message = error instanceof Error ? error.message : "Unable to refresh channels.";
+      setStatusState((prev) => ({ ...prev, error: message }));
       setIsRefreshing(false);
     }
   };
@@ -182,6 +182,69 @@ export function RokuScreen() {
     setFormState({ username: "", password: "", url: "" });
     handleSelectAccount(newAccount);
   };
+
+
+  useEffect(() => {
+    const refreshingFromApi = statusState.data?.refreshing ?? false;
+    setIsRefreshing(refreshingFromApi);
+  }, [statusState.data?.refreshing]);
+
+  useEffect(() => {
+    if (!isRefreshing) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const tick = window.setInterval(() => {
+      const startedAt = statusState.data?.refresh_started_at;
+      if (!startedAt) {
+        setElapsedSeconds((prev) => prev + 1);
+        return;
+      }
+      const started = Date.parse(startedAt);
+      if (Number.isNaN(started)) {
+        setElapsedSeconds((prev) => prev + 1);
+        return;
+      }
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+    }, 1000);
+
+    return () => window.clearInterval(tick);
+  }, [isRefreshing, statusState.data?.refresh_started_at]);
+
+  useEffect(() => {
+    if (phase !== "home" || !isRefreshing) return;
+
+    const poll = window.setInterval(async () => {
+      try {
+        const statusPayload = await getRokuStatus();
+        setStatusState({ data: statusPayload, loading: false, error: null });
+
+        if (!statusPayload.refreshing) {
+          setIsRefreshing(false);
+          const payload = await getRokuContent(activeCategory);
+          setContentState({ data: payload, loading: false, error: null });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to poll refresh status.";
+        setStatusState((prev) => ({ ...prev, loading: false, error: message }));
+      }
+    }, 2000);
+
+    return () => window.clearInterval(poll);
+  }, [activeCategory, isRefreshing, phase]);
+
+  const refreshProgress = isRefreshing
+    ? Math.min(95, Math.round((elapsedSeconds / EXPECTED_REFRESH_SECONDS) * 100))
+    : 0;
+
+  const refreshStateLabel = (() => {
+    if (statusState.data?.refresh_status === "failed") return "failed";
+    if (!isRefreshing) return "idle";
+    if (elapsedSeconds > STUCK_THRESHOLD_SECONDS) return "possibly stuck";
+    if (elapsedSeconds < 2) return "pending";
+    return "running";
+  })();
 
   const flattenedItems = useMemo(() => {
     if (!contentState.data?.rows) {
@@ -391,6 +454,18 @@ export function RokuScreen() {
                 {statusState.loading ? "Chargement…" : formatDate(statusState.data?.last_refresh ?? null)}
               </div>
               {statusState.error && <div className="text-red-400 text-sm">{statusState.error}</div>}
+              <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-950/60 p-3 text-xs">
+                <div className="flex items-center justify-between text-zinc-300">
+                  <span>Refresh state: {refreshStateLabel}</span>
+                  <span className="text-zinc-500">{isRefreshing ? `${elapsedSeconds}s` : "idle"}</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                  <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${refreshProgress}%` }} />
+                </div>
+                {statusState.data?.last_error && (
+                  <div className="text-red-400">Last error: {statusState.data.last_error}</div>
+                )}
+              </div>
               {statusState.data && (
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
