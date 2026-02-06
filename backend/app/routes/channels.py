@@ -27,11 +27,13 @@ import requests
 from backend.app.config import get_settings
 from backend.app.models import (
     ChannelListResponse,
+    ContentRowsResponse,
     CredentialsIn,
     StatsResponse,
     StatusResponse,
 )
 from backend.app.services import accounts, auth, cache, iptv
+from backend.app.services import roku_content
 
 LOGGER = logging.getLogger(__name__)
 
@@ -432,6 +434,33 @@ def groups() -> dict:
         "categories": cached.get("categories", []),
         "groups": cached.get("group_counts", {}),
     }
+
+
+# ============================================================================
+# ROKU UI
+# ============================================================================
+
+
+@router.get("/roku/content", response_model=ContentRowsResponse)
+def roku_content_rows(category: str = Query("tv", min_length=1)) -> ContentRowsResponse:
+    """Return Roku-ready content rows for a given category."""
+
+    cached = cache.load_cache()
+    channels = cached.get("channels", []) if cached else []
+    rows = roku_content.build_rows(channels, category)
+    return ContentRowsResponse(
+        category=iptv.coerce_category(category, ""),
+        rows=rows,
+        total_rows=len(rows),
+    )
+
+
+@router.get("/roku/status")
+def roku_status() -> dict:
+    """Return status metrics for Roku Status tab."""
+
+    cached = cache.load_cache()
+    return roku_content.build_status_payload(cached)
 
 
 # ============================================================================

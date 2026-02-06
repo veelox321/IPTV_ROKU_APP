@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ContentGrid" extends="Group">
+  <interface>
+    <field id="gridContent" type="node" />
+    <field id="selectedItem" type="node" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/ContentGrid.brs" />
+  <children>
+    <RowList id="rowList" translation="[0,0]" rowHeights="[180]" rowItemSize="[200,160]" rowLabelOffset="[0,0]" showRowLabel="true" />
+  </children>
+</component>

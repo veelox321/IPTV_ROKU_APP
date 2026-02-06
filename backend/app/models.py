@@ -53,3 +53,32 @@ class StatsResponse(BaseModel):
     movies: int
     series: int
     other: int
+
+
+class ContentItem(BaseModel):
+    """Content item formatted for Roku UI rows."""
+
+    id: str
+    title: str
+    description: str
+    genre: str
+    category: str
+    stream_url: str
+    poster_url: str | None = None
+    duration: str | None = None
+    rating: str | None = None
+
+
+class ContentRow(BaseModel):
+    """Row of content items."""
+
+    title: str
+    items: list[ContentItem]
+
+
+class ContentRowsResponse(BaseModel):
+    """Response wrapper for content rows."""
+
+    category: str
+    rows: list[ContentRow]
+    total_rows: int
