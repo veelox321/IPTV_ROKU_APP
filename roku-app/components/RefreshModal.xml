@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="RefreshModal" extends="Group">
+  <children>
+    <Rectangle width="1280" height="720" color="0x000000AA" />
+    <Group translation="[440,260]">
+      <BusySpinner />
+      <Label text="Refreshing playlists…" translation="[0,80]" width="400" height="40" horizAlign="center" />
+    </Group>
+  </children>
+</component>

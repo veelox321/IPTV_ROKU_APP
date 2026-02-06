@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MainScene" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+  <children>
+    <SplashView id="splashView" translation="[0,0]" />
+    <LoginView id="loginView" translation="[0,0]" visible="false" />
+    <HomeView id="homeView" translation="[0,0]" visible="false" />
+    <Group id="playbackView" visible="false">
+      <Video id="videoPlayer" width="1280" height="720" />
+    </Group>
+    <Timer id="loadingTextTimer" duration="3" repeat="false" />
+  </children>
+</component>
