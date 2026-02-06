@@ -1,4 +1,10 @@
-import type { ChannelResponse, StatsResponse, StatusResponse } from "./types";
+import type {
+  ChannelResponse,
+  RokuContentResponse,
+  RokuStatusResponse,
+  StatsResponse,
+  StatusResponse,
+} from "./types";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(
   /\/$/,
@@ -74,4 +80,18 @@ export async function getChannels(params: {
     throw new Error(`API ${response.status}: ${response.statusText}`);
   }
   return (await response.json()) as ChannelResponse;
+}
+
+export async function getRokuContent(category: string): Promise<RokuContentResponse> {
+  const url = new URL(`${API_BASE_URL}/roku/content`);
+  url.searchParams.set("category", category);
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${response.statusText}`);
+  }
+  return (await response.json()) as RokuContentResponse;
+}
+
+export async function getRokuStatus(): Promise<RokuStatusResponse> {
+  return requestJson<RokuStatusResponse>("/roku/status");
 }
