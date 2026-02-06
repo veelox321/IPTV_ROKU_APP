@@ -17,6 +17,8 @@ backend/data/*.json
 backend/.cache/
 backend/cache/
 **/channels.json
+backend/app/data/credentials.json
+backend/app/data/*.json
 
 # Node
 node_modules/

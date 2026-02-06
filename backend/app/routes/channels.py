@@ -31,8 +31,7 @@ from backend.app.models import (
     StatsResponse,
     StatusResponse,
 )
-from backend.app.services import auth, cache, iptv
-from backend.app.config import get_settings
+from backend.app.services import accounts, auth, cache, iptv
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +46,44 @@ router = APIRouter(tags=["channels"])
 def login(credentials: CredentialsIn) -> dict[str, str]:
     """Store IPTV credentials in memory."""
     auth.set_credentials(credentials)
+    try:
+        accounts.save_credentials(credentials)
+    except Exception:
+        LOGGER.exception("[ACCOUNT] Failed to persist credentials from /login")
     LOGGER.info("Login accepted for host=%s", credentials.host)
+    return {"status": "ok"}
+
+
+@router.post("/account")
+def save_account(credentials: CredentialsIn) -> dict[str, str]:
+    """Persist IPTV credentials and activate them immediately."""
+    try:
+        accounts.save_credentials(credentials)
+    except Exception:
+        LOGGER.exception("[ACCOUNT] Failed to save credentials")
+        raise HTTPException(500, "failed to save credentials")
+    auth.set_credentials(credentials)
+    LOGGER.info("[ACCOUNT] Active account set host=%s", credentials.host)
+    return {"status": "ok"}
+
+
+@router.get("/account")
+def get_account() -> dict[str, str | bool | None]:
+    """Return account status and configured host (without password)."""
+    active = auth.get_credentials()
+    stored = accounts.load_credentials()
+    host = (active or stored).host if (active or stored) else None
+    return {
+        "connected": active is not None,
+        "host": host,
+    }
+
+
+@router.delete("/account")
+def delete_account() -> dict[str, str]:
+    """Clear persisted credentials and disconnect."""
+    accounts.clear_credentials()
+    auth.clear_credentials()
     return {"status": "ok"}
 
 
@@ -141,96 +177,44 @@ def get_channels(
 
 def _refresh_job(credentials: CredentialsIn) -> None:
     """Background task: fetch, parse and cache IPTV playlist."""
-    started_at = time.monotonic()
-    LOGGER.info(
-        "Background refresh started pid=%s thread=%s host=%s",
-        os.getpid(),
-        threading.current_thread().name,
-        credentials.host,
-    )
+    LOGGER.info("[REFRESH] Background refresh started host=%s", credentials.host)
 
     try:
-        fetch_started = time.monotonic()
-        try:
-            playlist = iptv.fetch_m3u(credentials)
-        except Exception as exc:
-            cache.set_last_error(str(exc))
-            LOGGER.exception("Background refresh failed during fetch")
-            return
-        fetch_elapsed = time.monotonic() - fetch_started
-        preview = playlist[:200].replace("\n", "\\n")
-        LOGGER.info(
-            "Fetch complete bytes=%s elapsed=%.2fs preview=%s",
-            len(playlist.encode("utf-8")),
-            fetch_elapsed,
-            preview,
-        )
-        LOGGER.info("First 20 lines of playlist:\n%s", "\n".join(playlist.split("\n")[:20]))
-        parse_started = time.monotonic()
-        try:
-            channels = iptv.parse_m3u(playlist)
-        except Exception as exc:
-            cache.set_last_error(str(exc))
-            LOGGER.exception("Background refresh failed during parse")
-            return
-        parse_elapsed = time.monotonic() - parse_started
-        sample = [
-            {
-                "name": ch.get("name"),
-                "category": ch.get("category"),
-                "group": ch.get("group"),
-            }
-            for ch in channels[:3]
-        ]
-        LOGGER.info(
-            "Parse complete channels=%d elapsed=%.2fs sample=%s",
-            len(channels),
-            parse_elapsed,
-            sample,
-        )
+        LOGGER.info("[REFRESH] Using stored credentials host=%s", credentials.host)
+        playlist = iptv.fetch_m3u(credentials)
+        channels = iptv.parse_m3u(playlist)
 
-        save_started = time.monotonic()
-        try:
-            cache.save_cache(credentials.host, channels)
-            cache.set_last_error(None)
-        except Exception as exc:
-            cache.set_last_error(str(exc))
-            LOGGER.exception("Background refresh failed during save")
-            return
-        save_elapsed = time.monotonic() - save_started
-        LOGGER.info("Save complete elapsed=%.2fs", save_elapsed)
+        LOGGER.info("[REFRESH] Parsed %d channels", len(channels))
+        cache.save_cache(credentials.host, channels)
+
+    except Exception:
+        LOGGER.exception("[REFRESH] Background refresh failed")
 
     finally:
         cache.set_refreshing(False)
-        total_elapsed = time.monotonic() - started_at
-        LOGGER.info("Background refresh finished elapsed=%.2fs", total_elapsed)
+        LOGGER.info("[REFRESH] Background refresh finished")
+
 
 @router.post("/refresh")
 def refresh_channels(background_tasks: BackgroundTasks, request: Request) -> dict[str, str]:
     """Trigger a non-blocking refresh of the channel cache."""
 
     if not auth.has_credentials():
-        LOGGER.info("Refresh requested without login")
+        LOGGER.info("[REFRESH] Refresh requested without active account")
         raise HTTPException(409, "not logged in")
 
     if not cache.try_set_refreshing():
-        refresh_started_at = cache.get_refresh_started_at()
-        LOGGER.info(
-            "Refresh requested while another refresh is in progress client=%s refresh_started_at=%s",
-            request.client.host if request.client else "unknown",
-            refresh_started_at,
-        )
+        LOGGER.info("[REFRESH] Refresh requested while another refresh is in progress")
         raise HTTPException(409, "already refreshing")
 
     credentials = auth.get_credentials()
     if credentials is None:
         cache.set_refreshing(False)
-        LOGGER.info("Refresh requested but credentials missing in memory")
+        LOGGER.info("[REFRESH] Refresh requested but credentials missing in memory")
         raise HTTPException(409, "not logged in")
 
     LOGGER.info(
-        "Refresh requested client=%s host=%s",
-        request.client.host if request.client else "unknown",
+        "[REFRESH] Using stored credentials host=%s timeout=20s",
         credentials.host,
     )
     background_tasks.add_task(_refresh_job, credentials)
