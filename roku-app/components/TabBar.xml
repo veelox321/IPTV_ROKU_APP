@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="TabBar" extends="Group">
+  <interface>
+    <field id="tabs" type="assocarray" />
+    <field id="selectedTab" type="string" value="Live TV" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/TabBar.brs" />
+  <children>
+    <MarkupList id="tabList" translation="[0,0]" itemSize="[140,40]" numRows="1" itemComponentName="TabBarItem" />
+  </children>
+</component>

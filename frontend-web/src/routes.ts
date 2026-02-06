@@ -2,6 +2,7 @@ import React from "react";
 import { createBrowserRouter } from "react-router";
 import { SessionShell } from "./components/session-shell";
 import { HomeScreen } from "./screens/home-screen";
+import { RokuScreen } from "./screens/roku-screen";
 import { LiveScreen } from "./screens/live-screen";
 import { MoviesScreen } from "./screens/movies-screen";
 import { SeriesScreen } from "./screens/series-screen";
@@ -10,6 +11,12 @@ import { OthersScreen } from "./screens/others-screen";
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: React.createElement(SessionShell, {
+      Screen: RokuScreen,
+    }),
+  },
+  {
+    path: "/legacy",
     element: React.createElement(SessionShell, {
       Screen: HomeScreen,
     }),

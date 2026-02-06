@@ -30,3 +30,36 @@ export type StatsResponse = {
   series: number;
   other: number;
 };
+
+export type RokuContentItem = {
+  id: string;
+  title: string;
+  description: string;
+  genre: string;
+  category: string;
+  stream_url: string;
+  poster_url?: string | null;
+  duration?: string | null;
+  rating?: string | null;
+};
+
+export type RokuContentRow = {
+  title: string;
+  items: RokuContentItem[];
+};
+
+export type RokuContentResponse = {
+  category: string;
+  rows: RokuContentRow[];
+  total_rows: number;
+};
+
+export type RokuStatusResponse = {
+  last_refresh: string | null;
+  channels: number;
+  movies: number;
+  series: number;
+  episodes: number;
+  total_playlists: number;
+  account_status: string;
+};
