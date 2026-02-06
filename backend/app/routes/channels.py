@@ -262,6 +262,7 @@ def status() -> StatusResponse:
         cache_available=cached is not None,
         last_refresh=cached.get("timestamp") if cached else None,
         channel_count=cached.get("channel_count", 0) if cached else 0,
+        refresh_started_at=cache.get_refresh_started_at(),
         refresh_status=refresh_metadata["refresh_status"],
         last_error=refresh_metadata["last_error"],
         last_successful_refresh=refresh_metadata["last_successful_refresh"],
@@ -460,7 +461,13 @@ def roku_status() -> dict:
     """Return status metrics for Roku Status tab."""
 
     cached = cache.load_cache()
-    return roku_content.build_status_payload(cached)
+    refresh_metadata = cache.get_refresh_metadata(cached)
+    return roku_content.build_status_payload(
+        cached,
+        refresh_metadata=refresh_metadata,
+        refreshing=cache.is_refreshing(),
+        refresh_started_at=cache.get_refresh_started_at(),
+    )
 
 
 # ============================================================================

@@ -21,6 +21,10 @@ export type StatusResponse = {
   cache_available: boolean;
   last_refresh: string | null;
   channel_count: number;
+  refresh_started_at: string | null;
+  refresh_status: "loading" | "success" | "failed" | "missing" | string;
+  last_error: string | null;
+  last_successful_refresh: string | null;
 };
 
 export type StatsResponse = {
@@ -62,4 +66,8 @@ export type RokuStatusResponse = {
   episodes: number;
   total_playlists: number;
   account_status: string;
+  refreshing: boolean;
+  refresh_status: "loading" | "success" | "failed" | "missing" | string;
+  refresh_started_at: string | null;
+  last_error: string | null;
 };
