@@ -48,8 +48,7 @@ def get_cache_path() -> Path:
     """Return the cache file path (outside the repo by default)."""
     settings = get_settings()
     return settings.cache_dir / "channels.json"
-_CACHE_PATH = get_cache_path().resolve()
-LOGGER.info("Cache path configured: %s", _CACHE_PATH)
+
 
 # ---------------------------------------------------------------------------
 # INTERNAL HELPERS
@@ -83,6 +82,24 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> int:
             path.exists(),
         )
     return size
+
+
+def _invalidate_cache_file(path: Path, reason: str) -> None:
+    """Move a corrupted cache file aside so it is not reused."""
+    if not path.exists():
+        return
+    try:
+        timestamp = _now().strftime("%Y%m%dT%H%M%S")
+        quarantined = path.with_suffix(f".corrupt-{timestamp}.json")
+        path.replace(quarantined)
+        LOGGER.warning(
+            "Cache invalidated: reason=%s path=%s quarantined=%s",
+            reason,
+            path.resolve(),
+            quarantined.resolve(),
+        )
+    except Exception:
+        LOGGER.exception("Failed to invalidate cache file path=%s", path.resolve())
 
 
 def _normalize_channel(channel: dict[str, Any]) -> dict[str, Any]:
@@ -136,20 +153,25 @@ def is_refreshing() -> bool:
 
 def set_refreshing(value: bool) -> None:
     """Set the refresh-in-progress flag."""
-    global _REFRESHING, _REFRESH_STARTED_AT
+    global _REFRESHING, _REFRESH_STARTED_AT, _LAST_REFRESH_STATUS
     with _REFRESH_LOCK:
         _REFRESHING = value
         _REFRESH_STARTED_AT = _now().isoformat() if value else None
+    if value:
+        with _REFRESH_METADATA_LOCK:
+            _LAST_REFRESH_STATUS = "loading"
 
 
 def try_set_refreshing() -> bool:
     """Atomically set the refreshing flag if not already set."""
-    global _REFRESHING, _REFRESH_STARTED_AT
+    global _REFRESHING, _REFRESH_STARTED_AT, _LAST_REFRESH_STATUS
     with _REFRESH_LOCK:
         if _REFRESHING:
             return False
         _REFRESHING = True
         _REFRESH_STARTED_AT = _now().isoformat()
+    with _REFRESH_METADATA_LOCK:
+        _LAST_REFRESH_STATUS = "loading"
         return True
 
 
@@ -179,7 +201,7 @@ def get_refresh_metadata(cache_payload: dict[str, Any] | None) -> dict[str, Any]
         cached_success = cache_payload.get("last_successful_refresh")
 
     with _REFRESH_METADATA_LOCK:
-        status = _LAST_REFRESH_STATUS or cached_status or "success"
+        status = _LAST_REFRESH_STATUS or cached_status or ("missing" if cache_payload is None else "success")
         error = _LAST_REFRESH_ERROR if _LAST_REFRESH_ERROR is not None else cached_error
         last_success = _LAST_SUCCESSFUL_REFRESH or cached_success
 
@@ -225,6 +247,7 @@ def load_cache() -> dict[str, Any] | None:
         channels = payload.get("channels")
         if not isinstance(channels, list):
             LOGGER.warning("Invalid cache payload: channels is not a list")
+            _invalidate_cache_file(cache_path, "invalid_channels_payload")
             return None
 
         # Normalize channels in-place
@@ -267,6 +290,7 @@ def load_cache() -> dict[str, Any] | None:
 
     except json.JSONDecodeError:
         LOGGER.exception("Channel cache JSON is invalid")
+        _invalidate_cache_file(cache_path, "json_decode_error")
         return None
     except Exception:
         LOGGER.exception("Failed to load channel cache")

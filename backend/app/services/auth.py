@@ -1,9 +1,7 @@
 """In-memory credential storage service."""
 
-from pathlib import Path
-from typing import Optional
 import logging
-import json
+from typing import Optional
 
 from backend.app.models import CredentialsIn
 
