@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="StatusPanel" extends="Group">
+  <children>
+    <Label text="Status" font="font:LargeBoldSystemFont" />
+    <Label text="Last Refresh: 09:42" translation="[0,60]" />
+    <Label text="Channels: 320" translation="[0,100]" />
+    <Label text="Movies: 1,240" translation="[0,140]" />
+    <Label text="Series: 180" translation="[0,180]" />
+    <Label text="Episodes: 8,600" translation="[0,220]" />
+    <Label text="Total Playlists: 3" translation="[0,260]" />
+    <Label text="Account Status: Active" translation="[0,300]" color="0x3BD671FF" />
+  </children>
+</component>

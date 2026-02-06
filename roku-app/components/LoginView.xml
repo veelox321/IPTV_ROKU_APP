@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="LoginView" extends="Group">
+  <interface>
+    <field id="loginResult" type="string" value="" />
+    <field id="loginUsername" type="string" value="" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/LoginView.brs" />
+  <children>
+    <Rectangle width="1280" height="720" color="0x0D1117FF" />
+    <Label text="Sign In" translation="[80,80]" font="font:LargeBoldSystemFont" />
+    <LoginForm id="loginForm" translation="[80,160]" />
+    <BusySpinner id="authSpinner" translation="[600,520]" visible="false" />
+    <Label id="authError" translation="[80,560]" width="1120" height="40" color="0xFF5C5CFF" />
+  </children>
+</component>

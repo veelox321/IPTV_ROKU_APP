@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="Toast" extends="Group">
+  <interface>
+    <field id="message" type="string" value="" />
+  </interface>
+  <children>
+    <Rectangle width="520" height="60" color="0x1F2A34FF" />
+    <Label id="toastLabel" translation="[0,10]" width="520" height="40" horizAlign="center" />
+  </children>
+  <script type="text/brightscript"><![CDATA[
+    sub init()
+      m.toastLabel = m.top.findNode("toastLabel")
+      m.top.observeField("message", "onMessage")
+    end sub
+
+    sub onMessage()
+      m.toastLabel.text = m.top.message
+    end sub
+  ]]></script>
+</component>

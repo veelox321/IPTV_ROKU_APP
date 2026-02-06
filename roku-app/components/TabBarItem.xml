@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="TabBarItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" />
+  </interface>
+  <children>
+    <Label id="label" width="140" height="40" horizAlign="center" vertAlign="center" />
+  </children>
+  <script type="text/brightscript"><![CDATA[
+    sub init()
+      m.label = m.top.findNode("label")
+      m.top.observeField("itemContent", "onItemContent")
+      m.top.observeField("focusPercent", "onFocus")
+    end sub
+
+    sub onItemContent()
+      if m.top.itemContent <> invalid
+        m.label.text = m.top.itemContent.title
+      end if
+    end sub
+
+    sub onFocus()
+      if m.top.focusPercent = 1
+        m.label.color = "0xFFFFFFFF"
+        m.label.font = "font:MediumBoldSystemFont"
+      else
+        m.label.color = "0xA0B4C8FF"
+        m.label.font = "font:MediumSystemFont"
+      end if
+    end sub
+  ]]></script>
+</component>

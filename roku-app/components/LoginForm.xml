@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="LoginForm" extends="Group">
+  <children>
+    <Label text="Username" translation="[0,0]" />
+    <TextEditBox id="usernameField" translation="[0,40]" width="520" height="50" />
+
+    <Label text="Password" translation="[0,110]" />
+    <TextEditBox id="passwordField" translation="[0,150]" width="520" height="50" secureMode="true" />
+
+    <Button id="deviceCodeButton" translation="[0,230]" width="520" height="50" text="Use Device Code" />
+    <Button id="rememberMeButton" translation="[0,290]" width="520" height="50" text="Remember login: Off" />
+
+    <Button id="loginButton" translation="[0,370]" width="520" height="60" text="Sign In" />
+  </children>
+</component>
