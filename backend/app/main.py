@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import get_settings
 from backend.app.routes.channels import router as channels_router
+from backend.app.services import accounts, auth
 from backend.app.utils.logging import configure_logging
 
 LOGGER = logging.getLogger(__name__)
@@ -23,6 +24,16 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.debug)
     LOGGER.debug("Application startup.")
+    try:
+        credentials = accounts.load_credentials()
+        if credentials:
+            auth.set_credentials(credentials)
+            LOGGER.info(
+                "[ACCOUNT] Auto-login successful host=%s",
+                credentials.host,
+            )
+    except Exception:
+        LOGGER.exception("[ACCOUNT] Error while loading saved credentials")
     for route in app.router.routes:
         methods = getattr(route, "methods", None)
         methods_str = ",".join(sorted(methods)) if methods else "N/A"

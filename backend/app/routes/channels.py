@@ -23,7 +23,7 @@ from backend.app.models import (
     StatsResponse,
     StatusResponse,
 )
-from backend.app.services import auth, cache, iptv
+from backend.app.services import accounts, auth, cache, iptv
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +38,44 @@ router = APIRouter(tags=["channels"])
 def login(credentials: CredentialsIn) -> dict[str, str]:
     """Store IPTV credentials in memory."""
     auth.set_credentials(credentials)
+    try:
+        accounts.save_credentials(credentials)
+    except Exception:
+        LOGGER.exception("[ACCOUNT] Failed to persist credentials from /login")
     LOGGER.info("Login accepted for host=%s", credentials.host)
+    return {"status": "ok"}
+
+
+@router.post("/account")
+def save_account(credentials: CredentialsIn) -> dict[str, str]:
+    """Persist IPTV credentials and activate them immediately."""
+    try:
+        accounts.save_credentials(credentials)
+    except Exception:
+        LOGGER.exception("[ACCOUNT] Failed to save credentials")
+        raise HTTPException(500, "failed to save credentials")
+    auth.set_credentials(credentials)
+    LOGGER.info("[ACCOUNT] Active account set host=%s", credentials.host)
+    return {"status": "ok"}
+
+
+@router.get("/account")
+def get_account() -> dict[str, str | bool | None]:
+    """Return account status and configured host (without password)."""
+    active = auth.get_credentials()
+    stored = accounts.load_credentials()
+    host = (active or stored).host if (active or stored) else None
+    return {
+        "connected": active is not None,
+        "host": host,
+    }
+
+
+@router.delete("/account")
+def delete_account() -> dict[str, str]:
+    """Clear persisted credentials and disconnect."""
+    accounts.clear_credentials()
+    auth.clear_credentials()
     return {"status": "ok"}
 
 
@@ -132,21 +169,22 @@ def get_channels(
 
 def _refresh_job(credentials: CredentialsIn) -> None:
     """Background task: fetch, parse and cache IPTV playlist."""
-    LOGGER.info("Background refresh started")
+    LOGGER.info("[REFRESH] Background refresh started host=%s", credentials.host)
 
     try:
+        LOGGER.info("[REFRESH] Using stored credentials host=%s", credentials.host)
         playlist = iptv.fetch_m3u(credentials)
         channels = iptv.parse_m3u(playlist)
 
-        LOGGER.info("Parsed %d channels", len(channels))
+        LOGGER.info("[REFRESH] Parsed %d channels", len(channels))
         cache.save_cache(credentials.host, channels)
 
     except Exception:
-        LOGGER.exception("Background refresh failed")
+        LOGGER.exception("[REFRESH] Background refresh failed")
 
     finally:
         cache.set_refreshing(False)
-        LOGGER.info("Background refresh finished")
+        LOGGER.info("[REFRESH] Background refresh finished")
 
 
 @router.post("/refresh")
@@ -154,19 +192,23 @@ def refresh_channels(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Trigger a non-blocking refresh of the channel cache."""
 
     if not auth.has_credentials():
-        LOGGER.info("Refresh requested without login")
+        LOGGER.info("[REFRESH] Refresh requested without active account")
         raise HTTPException(409, "not logged in")
 
     if not cache.try_set_refreshing():
-        LOGGER.info("Refresh requested while another refresh is in progress")
+        LOGGER.info("[REFRESH] Refresh requested while another refresh is in progress")
         raise HTTPException(409, "already refreshing")
 
     credentials = auth.get_credentials()
     if credentials is None:
         cache.set_refreshing(False)
-        LOGGER.info("Refresh requested but credentials missing in memory")
+        LOGGER.info("[REFRESH] Refresh requested but credentials missing in memory")
         raise HTTPException(409, "not logged in")
 
+    LOGGER.info(
+        "[REFRESH] Using stored credentials host=%s timeout=20s",
+        credentials.host,
+    )
     background_tasks.add_task(_refresh_job, credentials)
     return {"status": "started"}
 

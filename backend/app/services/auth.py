@@ -31,3 +31,10 @@ def has_credentials() -> bool:
     """Check whether credentials are present."""
 
     return get_credentials() is not None
+
+
+def clear_credentials() -> None:
+    """Clear in-memory credentials."""
+    global _credentials
+    _credentials = None
+    LOGGER.info("Credentials cleared from memory")
