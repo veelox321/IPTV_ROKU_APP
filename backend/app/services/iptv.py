@@ -230,18 +230,37 @@ def _safe_text(value: str | None, fallback: str) -> str:
     return cleaned if cleaned else fallback
 
 
+import re
+
+ATTR_RE = re.compile(r'([\w\-]+)="([^"]*)"')
+
 def _parse_extinf_line(line: str) -> tuple[dict[str, str], str]:
-    """Parse an EXTINF line into attributes and display name."""
+    """
+    Parse an EXTINF line into (attrs, display_name).
 
-    header, _, name_part = line.partition(",")
-    attrs = {match.group(1): match.group(2) for match in ATTR_RE.finditer(header)}
+    Example:
+    #EXTINF:-1 tvg-id="x" group-title="News",CNN
+    """
 
-    name = _safe_text(name_part, "")
-    if not name:
-        name = _safe_text(attrs.get("tvg-name"), "")
-    if not name:
-        name = _safe_text(attrs.get("tvg-id"), "Unknown")
-    return attrs, name
+    if not line.startswith("#EXTINF"):
+        raise ValueError("Not an EXTINF line")
+
+    # Split metadata and display name
+    try:
+        meta, display_name = line.split(",", 1)
+    except ValueError:
+        raise ValueError("EXTINF line missing display name")
+
+    # Remove "#EXTINF:-1"
+    meta = meta.replace("#EXTINF:", "", 1)
+    meta = meta.replace("-1", "", 1).strip()
+
+    attrs: dict[str, str] = {}
+    for key, value in ATTR_RE.findall(meta):
+        attrs[key] = value.strip()
+
+    return attrs, display_name.strip()
+
 
 
 

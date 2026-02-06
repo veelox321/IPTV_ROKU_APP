@@ -277,6 +277,7 @@ def debug_cache(request: Request) -> dict:
         if exists
         else None
     )
+    
     preview = None
     keys = None
     if exists:
