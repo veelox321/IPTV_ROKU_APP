@@ -35,28 +35,8 @@ def has_credentials() -> bool:
     return get_credentials() is not None
 
 
-<<<<<<< HEAD
-def load_credentials_from_file(path: Path) -> bool:
-    """Load credentials from a JSON file and persist them in memory."""
-
-    if not path.exists():
-        LOGGER.debug("Credential file not found at %s", path)
-        return False
-
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        credentials = CredentialsIn(**payload)
-    except Exception as exc:
-        LOGGER.warning("Failed to load credentials from %s: %s", path, exc)
-        return False
-
-    set_credentials(credentials)
-    LOGGER.info("Loaded credentials from file for host=%s", credentials.host)
-    return True
-=======
 def clear_credentials() -> None:
     """Clear in-memory credentials."""
     global _credentials
     _credentials = None
     LOGGER.info("Credentials cleared from memory")
->>>>>>> 9191c0ca97134ea448c01292342bb83e8295426b
